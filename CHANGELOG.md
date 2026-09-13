@@ -1,3 +1,10 @@
+## [1.11.0] - 2026-09-13
+
+### Added
+
+- `[Log] TameDeaths` (on): a line in the server log whenever a tamed creature dies -- which one, its name and level, where, and what killed it: the creature (tamed or wild, with its level) or player that struck the last blow, or burning, smoke, a fall, drowning, freezing, poison. A tamed creature taken out of the world alive (a command, another mod) is logged too. Every death runs through `Character.CheckDeath` on the creature's owner, which with this mod is the server, and the last hit applied (`Character.m_lastHit`) carries the type and the attacker's id. Verified on a local 1.0.12 server: a wild wolf's attacks, a tamed wolf's, burning, and a destroy without death.
+
+
 ## [1.10.1] - 2026-09-13
 
 ### Fixed

@@ -30,6 +30,8 @@ namespace PluginConfiguration
 		public static ConfigEntry<bool> fixSaveClientChanges;
 		public static ConfigEntry<bool> fixTeleportGhosts;
 
+		public static ConfigEntry<bool> logTameDeaths;
+
 		public static void Load(ConfigFile config)
 		{
 			modEnabled = config.Bind<bool>("General", "Enabled", true, "Enable or disable the mod");
@@ -80,6 +82,9 @@ namespace PluginConfiguration
 				"Mark a world chunk as changed when a player's own change to an object arrives, so the next save writes it. Valheim 1.0 only rewrites changed chunks and does not count changes received from players, so what a player just built or moved could be missing after a restart.");
 			fixTeleportGhosts = config.Bind<bool>("Fixes", "TeleportGhosts", true,
 				"Tell the players near the old spot to drop a player who teleported away. Valheim 1.0 checks whether an object left their area before it stores the new position, so the teleported player stayed there for them, frozen, until they next crossed a zone line.");
+
+			logTameDeaths = config.Bind<bool>("Log", "TameDeaths", true,
+				"Write a line to the log when a tamed creature dies: which one, its name and level, where, and what killed it -- the creature (tamed or wild, with its level) or player that struck the last blow, or burning, smoke, a fall, drowning, freezing, poison. A tamed creature taken out of the world alive is logged too.");
 		}
 	}
 }
