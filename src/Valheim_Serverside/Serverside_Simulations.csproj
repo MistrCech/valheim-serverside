@@ -107,7 +107,6 @@
     <Compile Include="Features\Performance.cs" />
     <Compile Include="AdminCommands.cs" />
     <Compile Include="Features\Fixes.cs" />
-    <Compile Include="Features\TameLog.cs" />
     <Compile Include="Requirements.cs" />
     <Compile Include="FeaturesLib.cs" />
     <Compile Include="Features\Debugging.cs" />
