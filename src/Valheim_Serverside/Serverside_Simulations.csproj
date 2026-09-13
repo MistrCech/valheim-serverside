@@ -112,6 +112,7 @@
     <Compile Include="Features\Debugging.cs" />
     <Compile Include="ServerSafe.cs" />
     <Compile Include="ServerConsole.cs" />
+    <Compile Include="ConsoleInput.cs" />
     <Compile Include="VanillaDrift.cs" />
     <Compile Include="Configuration.cs" />
     <Compile Include="SequentialInstructions.cs" />

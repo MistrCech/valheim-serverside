@@ -25,6 +25,7 @@ namespace PluginConfiguration
 		public static ConfigEntry<int> serverTargetFps;
 
 		public static ConfigEntry<int> maxGiveAmount;
+		public static ConfigEntry<int> consoleInputCodePage;
 
 		public static ConfigEntry<bool> fixSaveClientChanges;
 		public static ConfigEntry<bool> fixTeleportGhosts;
@@ -54,6 +55,9 @@ namespace PluginConfiguration
 				"Read commands from standard input: save, stop, players, give <item> <amount> <player>, broadcast <text>, event <name> <player>, events, help; anything else goes to the game's own console (kick, ban, unban, banned, stopevent, devcommands, skiptime ...). In AMP set App.HasWriteableConsole=True to type them into its console, and App.ExitMethod=String with App.ExitString=stop to shut down cleanly. On Windows also set [Logging.Console] Enabled = false in BepInEx.cfg, or BepInEx's own console takes over standard input.");
 			maxGiveAmount = config.Bind<int>("Server", "MaxGiveAmount", 1000,
 				"Most items one give command may drop.");
+			consoleInputCodePage = config.Bind<int>("Server", "ConsoleInputCodePage", 1250,
+				new ConfigDescription("How to read a console line that is not valid UTF-8 (UTF-8 is always tried first). Panels on Windows may write their code page instead: 1250 Central European (Czech), 852 Central European DOS, 1252 Western, 65001 UTF-8 only. The log says which bytes arrived the first time this is needed.",
+					new AcceptableValueList<int>(1250, 852, 1252, 65001)));
 			unityJobWorkers = config.Bind<int>("Server", "UnityJobWorkers", 8,
 				"Upper limit on Unity job worker threads. Unity starts one per CPU core, and on many-core hosts the idle ones still use CPU. Only ever lowers the count. 0 leaves Unity's default.");
 

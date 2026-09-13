@@ -1,3 +1,10 @@
+## [1.10.1] - 2026-09-13
+
+### Fixed
+
+- Accented letters typed into the server console arrived as `?`: AMP on Windows writes its own code page to the process while Unity's Mono reads standard input as UTF-8. Lines are now read as bytes; valid UTF-8 is taken as such, anything else is decoded with `[Server] ConsoleInputCodePage` (1250 by default; 852, 1252, 65001), and the first such line is logged with its bytes so the right page can be set.
+
+
 ## [1.10.0] - 2026-09-13
 
 ### Added

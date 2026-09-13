@@ -45,15 +45,18 @@ namespace Valheim_Serverside
 		{
 			try
 			{
-				string line;
-				while ((line = System.Console.In.ReadLine()) != null)
+				ConsoleInput.ReadLines(() => PluginConfiguration.Configuration.consoleInputCodePage.Value, (line, notice) =>
 				{
+					if (notice != null)
+					{
+						s_commands.Enqueue("" + notice);
+					}
 					line = line.Trim();
 					if (line.Length > 0)
 					{
 						s_commands.Enqueue(line);
 					}
-				}
+				});
 			}
 			catch (Exception e)
 			{
@@ -98,6 +101,12 @@ namespace Valheim_Serverside
 			if (command[0] == '\0')
 			{
 				ServersidePlugin.logger.LogWarning($"Console commands unavailable, cannot read standard input: {command.Substring(1)}");
+				return;
+			}
+			if (command[0] == '')
+			{
+				ServersidePlugin.logger.LogWarning(command.Substring(1));
+				WriteOut(command.Substring(1));
 				return;
 			}
 			string[] words = command.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
