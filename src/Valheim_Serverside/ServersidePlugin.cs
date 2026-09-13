@@ -23,7 +23,7 @@ namespace Valheim_Serverside
 		// detect it by GUID still do and the two cannot be loaded side by side.
 		public const string PluginGUID = "MVP.Valheim_Serverside_Simulations";
 		public const string PluginName = "Sarkastic.eu Dedicated Simulation";
-		public const string PluginVersion = "1.9.0";
+		public const string PluginVersion = "1.10.0";
 
 		private static ServersidePlugin context;
 
@@ -70,7 +70,6 @@ namespace Valheim_Serverside
 			availableFeatures.AddFeature(new Features.MaxObjectsPerFrame());
 			availableFeatures.AddFeature(new Features.Networking());
 			availableFeatures.AddFeature(new Features.Performance());
-			availableFeatures.AddFeature(new Features.AdminChat());
 			availableFeatures.AddFeature(new Features.Fixes());
 			availableFeatures.AddFeature(new Features.Debugging());
 			availableFeatures.AddFeature(new Features.Compat_ValheimPlus());
@@ -100,10 +99,6 @@ namespace Valheim_Serverside
 			if (installed)
 			{
 				Features.PerformanceStats.Frame();
-				if (Configuration.adminChatEnabled.Value)
-				{
-					Features.AdminChat.Tick();
-				}
 			}
 		}
 

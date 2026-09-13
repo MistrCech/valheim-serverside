@@ -24,11 +24,10 @@ namespace PluginConfiguration
 		public static ConfigEntry<int> performanceStatsMinutes;
 		public static ConfigEntry<int> serverTargetFps;
 
-		public static ConfigEntry<bool> fixSaveClientChanges;
+		public static ConfigEntry<int> maxGiveAmount;
 
-		public static ConfigEntry<bool> adminChatEnabled;
-		public static ConfigEntry<string> adminChatPrefix;
-		public static ConfigEntry<int> adminChatMaxGive;
+		public static ConfigEntry<bool> fixSaveClientChanges;
+		public static ConfigEntry<bool> fixTeleportGhosts;
 
 		public static void Load(ConfigFile config)
 		{
@@ -52,7 +51,9 @@ namespace PluginConfiguration
 				"Every this many minutes, log per player how often their send queue was full. 0 disables.");
 
 			consoleCommandsEnabled = config.Bind<bool>("Server", "ConsoleCommands", true,
-				"Read commands from standard input: save, stop, players, give <item> <amount> <player>. In AMP set App.HasWriteableConsole=True to type them into its console, and App.ExitMethod=String with App.ExitString=stop to shut down cleanly. On Windows also set [Logging.Console] Enabled = false in BepInEx.cfg, or BepInEx's own console takes over standard input.");
+				"Read commands from standard input: save, stop, players, give <item> <amount> <player>, broadcast <text>, event <name> <player>, events, help; anything else goes to the game's own console (kick, ban, unban, banned, stopevent, devcommands, skiptime ...). In AMP set App.HasWriteableConsole=True to type them into its console, and App.ExitMethod=String with App.ExitString=stop to shut down cleanly. On Windows also set [Logging.Console] Enabled = false in BepInEx.cfg, or BepInEx's own console takes over standard input.");
+			maxGiveAmount = config.Bind<int>("Server", "MaxGiveAmount", 1000,
+				"Most items one give command may drop.");
 			unityJobWorkers = config.Bind<int>("Server", "UnityJobWorkers", 8,
 				"Upper limit on Unity job worker threads. Unity starts one per CPU core, and on many-core hosts the idle ones still use CPU. Only ever lowers the count. 0 leaves Unity's default.");
 
@@ -73,13 +74,8 @@ namespace PluginConfiguration
 
 			fixSaveClientChanges = config.Bind<bool>("Fixes", "SaveClientChanges", true,
 				"Mark a world chunk as changed when a player's own change to an object arrives, so the next save writes it. Valheim 1.0 only rewrites changed chunks and does not count changes received from players, so what a player just built or moved could be missing after a restart.");
-
-			adminChatEnabled = config.Bind<bool>("AdminChat", "Enabled", false,
-				"Let admins (adminlist.txt) run commands by shouting them in chat: /give <item> [amount], /save, /help; replies go to their console (F5). Valheim 1.0 does not let a player on a dedicated server use spawn from the console, admin or not. Off by default: the server console has the same commands (give <item> <amount> <player>, players, save) for the panel the server runs in.");
-			adminChatPrefix = config.Bind<string>("AdminChat", "Prefix", "/",
-				"What a chat message must start with to count as a command.");
-			adminChatMaxGive = config.Bind<int>("AdminChat", "MaxGiveAmount", 1000,
-				"Most items one give may drop, in chat or on the console.");
+			fixTeleportGhosts = config.Bind<bool>("Fixes", "TeleportGhosts", true,
+				"Tell the players near the old spot to drop a player who teleported away. Valheim 1.0 checks whether an object left their area before it stores the new position, so the teleported player stayed there for them, frozen, until they next crossed a zone line.");
 		}
 	}
 }

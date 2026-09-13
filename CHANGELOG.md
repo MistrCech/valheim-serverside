@@ -1,3 +1,19 @@
+## [1.10.0] - 2026-09-13
+
+### Added
+
+- Console commands `broadcast <text>` (a message in the middle of every player's screen, the way the game announces a raid) and `event <name> <player>` (a raid at that player; `events` lists the names). The game's own `event` needs a local player and cannot work on a dedicated server.
+- Anything typed on the server console that is not one of ours is passed to the game's own console, which a dedicated server has but never reads, and what it prints goes to standard output for the panel. So the vanilla server commands work too: `kick`, `ban`, `unban`, `banned`, `stopevent`, `randomevent`, and after `devcommands` the cheat commands that need no player: `skiptime`, `setkey`, `removekey`, `resetkeys`, `listkeys`, `env`, `tod`, `wind`. Verified on a local 1.0.12 server.
+
+### Fixed
+
+- `[Fixes] TeleportGhosts`: a player who portalled or respawned stayed visible to the players near the old spot, frozen, until they next crossed a zone line. Valheim 1.0 files an object under its new sector before it stores the new position, and the check that tells each player to drop objects that left their area reads the position, so it saw the old spot and queued nothing. The check is re-run once the position is stored; a player already told has no entry left, so nothing is sent twice. Reproduced and verified with a fake peer on a local 1.0.12 server. Reported for 1.0 by ValheimCommunityPatch ("Fix Teleport Ghost Players").
+
+### Removed
+
+- `[AdminChat]`: a Valheim client runs anything typed into the chat with a leading `/` as a local console command and never sends it, so `/give` could not reach the server from a real client. `MaxGiveAmount` moved to `[Server]`.
+
+
 ## [1.9.0] - 2026-09-12
 
 ### Fixed

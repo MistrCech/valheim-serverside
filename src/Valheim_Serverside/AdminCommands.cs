@@ -7,8 +7,8 @@ using UnityEngine;
 namespace Valheim_Serverside
 {
 	/*
-		What the admin commands do, shared by the server console (ServerConsole) and the chat
-		(Features.AdminChat). Everything here runs on the server's main thread.
+		What the server console's own commands do (ServerConsole). Everything here runs on the
+		server's main thread.
 	*/
 	public static class AdminCommands
 	{
@@ -58,7 +58,7 @@ namespace Valheim_Serverside
 			{
 				return $"No item '{itemName}'.{Suggest(itemName)}";
 			}
-			amount = Mathf.Clamp(amount, 1, Mathf.Max(1, PluginConfiguration.Configuration.adminChatMaxGive.Value));
+			amount = Mathf.Clamp(amount, 1, Mathf.Max(1, PluginConfiguration.Configuration.maxGiveAmount.Value));
 			ZDO character = ZDOMan.instance.GetZDO(target.m_characterID);
 			Vector3 origin = (character != null ? character.GetPosition() : target.GetRefPos()) + Vector3.up * 1.5f;
 			int maxStack = Mathf.Max(1, prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_maxStackSize);
@@ -91,6 +91,35 @@ namespace Valheim_Serverside
 			ServersidePlugin.logger.LogInfo($"Admin: {byWhom} requested a world save");
 			ZNet.instance.Save(sync: false, saveOtherPlayerProfiles: true, waitForNextFrame: true);
 			return "Saving world";
+		}
+
+		// A message in the middle of every player's screen, the way the game announces a raid. Chat
+		// from the server is not shown by Valheim 1.0 clients (it needs a real player's user id).
+		public static string Broadcast(string text, string byWhom)
+		{
+			ZRoutedRpc.instance.InvokeRoutedRPC(ZRoutedRpc.Everybody, "ShowMessage", (int)MessageHud.MessageType.Center, text);
+			ServersidePlugin.logger.LogInfo($"Admin: {byWhom} broadcast: {text}");
+			return $"shown to {ZNet.instance.GetNrOfPlayers()} player(s): {text}";
+		}
+
+		// Starts a random event (raid) at the player, like the game's `event` command at the host.
+		public static string StartEvent(string name, ZNetPeer target, string byWhom)
+		{
+			if (!RandEventSystem.instance || !RandEventSystem.instance.HaveEvent(name))
+			{
+				return $"No event '{name}'. Events: {Events()}";
+			}
+			ZDO character = ZDOMan.instance.GetZDO(target.m_characterID);
+			Vector3 at = character != null ? character.GetPosition() : target.GetRefPos();
+			RandEventSystem.instance.SetRandomEventByName(name, at);
+			string result = $"{byWhom} started event {name} at {target.m_playerName} ({at.x:0},{at.z:0})";
+			ServersidePlugin.logger.LogInfo("Admin: " + result);
+			return result;
+		}
+
+		public static string Events()
+		{
+			return RandEventSystem.instance ? string.Join(", ", RandEventSystem.instance.m_events.Select(e => e.m_name)) : "none (no world loaded)";
 		}
 
 		public static bool TryParseAmount(string text, out int amount)

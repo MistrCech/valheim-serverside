@@ -1,13 +1,22 @@
 using System;
 using System.Collections.Concurrent;
 using System.Threading;
+using HarmonyLib;
 using UnityEngine;
 
 namespace Valheim_Serverside
 {
 	/*
-		Commands read from the server's standard input: `save`, `stop`, `players`,
-		`give <item> <amount> <player>`.
+		Commands read from the server's standard input.
+
+		Own commands: `save`, `stop`, `players`, `give <item> <amount> <player>`, `broadcast <text>`,
+		`event <name> <player>`, `events`, `help`. Anything else is passed to the game's own console
+		(the Terminal a dedicated server has but never reads), so the vanilla server commands work
+		too: `kick`, `ban`, `unban`, `banned`, `stopevent`, `randomevent`, and after `devcommands`
+		the cheat commands that need no player: `skiptime`, `setkey`, `removekey`, `resetkeys`,
+		`listkeys`, `env`, `tod`, `wind`. The commands that act on "the player" (`spawn`, `god`,
+		`tp`, `event` without a target) cannot work on a dedicated server; `give` and
+		`event <name> <player>` are the server's versions.
 
 		A vanilla dedicated server does not read its standard input, so a panel such as AMP can
 		only stop it by closing or killing the process. On Windows that skips the world save on
@@ -20,13 +29,16 @@ namespace Valheim_Serverside
 	*/
 	public static class ServerConsole
 	{
+		private const string Commands = "save | stop | players | give <item> <amount> <player> | broadcast <text> | event <name> <player> | events | help"
+			+ " -- anything else goes to the game console: kick, ban, unban, banned, stopevent, devcommands, skiptime ...";
+
 		private static readonly ConcurrentQueue<string> s_commands = new ConcurrentQueue<string>();
 
 		public static void Start()
 		{
 			Thread reader = new Thread(ReadLoop) { IsBackground = true, Name = "Dedicated Simulation console" };
 			reader.Start();
-			ServersidePlugin.logger.LogInfo("Console commands enabled on standard input: save, stop, players, give <item> <amount> <player>");
+			ServersidePlugin.logger.LogInfo("Console commands enabled on standard input: " + Commands);
 		}
 
 		private static void ReadLoop()
@@ -57,6 +69,11 @@ namespace Valheim_Serverside
 		private static void Reply(string text)
 		{
 			ServersidePlugin.logger.LogInfo("Console: " + text);
+			WriteOut(text);
+		}
+
+		private static void WriteOut(string text)
+		{
 			try
 			{
 				System.Console.Out.WriteLine("Console: " + text);
@@ -119,11 +136,46 @@ namespace Valheim_Serverside
 							Reply(target == null ? problem : AdminCommands.Give(target, words[1], amount, "console"));
 						}
 						break;
+					case "broadcast":
+					case "say":
+						if (!worldLoaded)
+						{
+							Reply("no world loaded");
+						}
+						else if (words.Length < 2)
+						{
+							Reply("usage: broadcast <text>");
+						}
+						else
+						{
+							Reply(AdminCommands.Broadcast(command.Substring(words[0].Length).Trim(), "console"));
+						}
+						break;
+					case "event":
+						// event <name> <player name, may contain spaces>: starts the event at that player
+						if (!worldLoaded)
+						{
+							Reply("no world loaded");
+						}
+						else if (words.Length < 3)
+						{
+							Reply("usage: event <name> <player>, e.g. event army_eikthyr Ulf; `events` lists the names");
+						}
+						else
+						{
+							string name = string.Join(" ", words, 2, words.Length - 2);
+							ZNetPeer target = AdminCommands.FindPlayer(name, out string problem);
+							Reply(target == null ? problem : AdminCommands.StartEvent(words[1], target, "console"));
+						}
+						break;
+					case "events":
+						Reply(worldLoaded ? "events: " + AdminCommands.Events() : "no world loaded");
+						break;
 					case "help":
-						Reply("commands: save | stop | players | give <item> <amount> <player>");
+						Reply("commands: " + Commands);
 						break;
 					default:
-						Reply($"unknown command '{command}'. Commands: save, stop, players, give <item> <amount> <player>");
+						RunGameCommand(command, words[0]);
 						break;
 				}
 			}
@@ -131,6 +183,52 @@ namespace Valheim_Serverside
 			{
 				ServersidePlugin.logger.LogWarning($"Console: '{command}' failed: {e}");
 				Reply($"'{command}' failed: {e.Message}");
+			}
+		}
+
+		/*
+			Anything that is not ours goes to the game's console. What that prints (Terminal.AddString)
+			is copied to standard output while the command runs; the game itself already logs it.
+		*/
+		private static bool s_capturing;
+		private static int s_captured;
+		private static Harmony s_capture;
+
+		private static void RunGameCommand(string command, string word)
+		{
+			if (!Console.instance)
+			{
+				Reply($"'{word}' is not one of ours and the game console is not up yet. Commands: {Commands}");
+				return;
+			}
+			if (s_capture == null)
+			{
+				s_capture = new Harmony(ServersidePlugin.PluginGUID + ".ServerConsole");
+				s_capture.Patch(AccessTools.Method(typeof(Terminal), "AddString", new[] { typeof(string) }),
+					postfix: new HarmonyMethod(typeof(ServerConsole), nameof(AddStringPostfix)));
+			}
+			s_capturing = true;
+			s_captured = 0;
+			try
+			{
+				Console.instance.TryRunCommand(command, silentFail: false, skipAllowedCheck: true);
+			}
+			finally
+			{
+				s_capturing = false;
+			}
+			if (s_captured == 0)
+			{
+				Reply($"game console ran '{word}' without output");
+			}
+		}
+
+		public static void AddStringPostfix(Terminal __instance, string text)
+		{
+			if (s_capturing && __instance == Console.instance)
+			{
+				s_captured++;
+				WriteOut(text);
 			}
 		}
 	}
