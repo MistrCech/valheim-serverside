@@ -90,13 +90,24 @@ namespace Valheim_Serverside.Features
 			so a frame finished in 12 ms still lasts 33 ms. Every request that goes through here on a
 			dedicated server is replaced by the configured rate; below 30 the game would treat the value
 			as "no limit" and spin a core at full speed, so that is the floor.
+
+			Bound by position (__0, __1) rather than by name: Valheim 1.0.14 split the refresh rate
+			out of this method, and the parameter this patch used to name, value, no longer exists.
+			Harmony then throws, which took the whole feature down. The argument list in the attribute
+			keeps a real signature change loud instead of silent.
+
+			Both parameters are set. The second one decides whether the game quantises the request
+			against 59.94 or 119.88 Hz (PresentManager.UpdateDisplayRefreshRate), and it arrives as the
+			preset's fps limit, -1 by default. Setting it as well makes 30 and 60 land deterministically;
+			they are the only requests in [30, 240] that are submultiples of 59.94 within the margin the
+			game uses, so a higher value stays at the mercy of what Screen.resolutions reports headless.
 		*/
-		[HarmonyPatch(typeof(PresentManager), "RequestTargetFrameRate")]
+		[HarmonyPatch(typeof(PresentManager), "RequestTargetFrameRate", new Type[] { typeof(int), typeof(int) })]
 		public static class PresentManager_RequestTargetFrameRate_Patch
 		{
 			private static int s_logged;
 
-			static void Prefix(ref int value)
+			static void Prefix(ref int __0, ref int __1)
 			{
 				int fps = Configuration.serverTargetFps.Value;
 				// Called before ZNet exists (GraphicsSettingsManager.Awake), so the plugin's own check is used.
@@ -105,11 +116,12 @@ namespace Valheim_Serverside.Features
 					return;
 				}
 				int wanted = Mathf.Clamp(fps, 30, 240);
-				if (s_logged++ == 0 || wanted != value)
+				if (s_logged++ == 0 || wanted != __0)
 				{
-					ServersidePlugin.logger.LogInfo($"Server target frame rate: {value} -> {wanted}");
+					ServersidePlugin.logger.LogInfo($"Server target frame rate: {__0} -> {wanted}");
 				}
-				value = wanted;
+				__0 = wanted;
+				__1 = wanted;
 			}
 		}
 
