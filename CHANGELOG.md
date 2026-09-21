@@ -2,12 +2,14 @@
 
 ### Fixed
 
-- Valheim 1.0.15 gave `PresentManager.RequestTargetFrameRate` a second parameter and renamed the
-  first, so the patch that sets the server's frame rate failed and took the whole Performance
-  feature down with it (logged as "Feature Performance failed to apply and is disabled"). On
-  1.0.15 the server therefore ran at the game's 30 FPS, without the even world-update interval,
-  the physics catch-up limit, the zone budget and the performance report. The patch now takes
-  every overload of that method and its first argument by position, not by name.
+- Valheim 1.0.14 gave `PresentManager.RequestTargetFrameRate` a second parameter and renamed the
+  first (the patch that let the frame rate limiter work with v-sync), so the patch that sets the
+  server's frame rate failed and took the whole Performance feature down with it (logged as
+  "Feature Performance failed to apply and is disabled"). From 1.0.14 on, the server therefore ran
+  at the game's 30 FPS, without the even world-update interval, the physics catch-up limit, the
+  zone budget and the performance report. The patch now takes every overload of that method and
+  its first argument by position, not by name. Reported by @Merl in cechacek/valheim-serverside#1,
+  who found it first and also traced it to 1.0.14.
 
   Checked on 1.0.15 against 1.0.12 with a server simulating a base: a client's `UseDoor` toggles
   the door, a bed takes its owner, an item a client claims stays claimed, and `army_eikthyr`
