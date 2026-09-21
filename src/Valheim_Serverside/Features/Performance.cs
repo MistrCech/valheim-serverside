@@ -4,6 +4,7 @@ using PluginConfiguration;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Reflection;
 using UnityEngine;
 
 namespace Valheim_Serverside.Features
@@ -91,13 +92,39 @@ namespace Valheim_Serverside.Features
 			dedicated server is replaced by the configured rate; below 30 the game would treat the value
 			as "no limit" and spin a core at full speed, so that is the floor.
 		*/
-		[HarmonyPatch(typeof(PresentManager), "RequestTargetFrameRate")]
+		[HarmonyPatch]
 		public static class PresentManager_RequestTargetFrameRate_Patch
 		{
 			private static int s_logged;
 
-			static void Prefix(ref int value)
+			/*
+				Valheim 1.0.15 gave the method a second parameter and renamed the first
+				(RequestTargetFrameRate(int targetFrameRate, int targetRefreshRate)), which made a
+				patch written against `int value` fail and took the whole feature down with it. Every
+				overload whose first parameter is the frame rate is patched, and it is taken by
+				position (__0), not by name.
+			*/
+			static IEnumerable<MethodBase> TargetMethods()
 			{
+				List<MethodBase> found = new List<MethodBase>();
+				foreach (MethodInfo method in AccessTools.GetDeclaredMethods(typeof(PresentManager)))
+				{
+					ParameterInfo[] parameters = method.GetParameters();
+					if (method.Name == "RequestTargetFrameRate" && parameters.Length >= 1 && parameters[0].ParameterType == typeof(int))
+					{
+						found.Add(method);
+					}
+				}
+				if (found.Count == 0)
+				{
+					ServersidePlugin.logger.LogWarning("PresentManager.RequestTargetFrameRate(int, ...) is gone from this game version: the server keeps the frame rate the game asks for.");
+				}
+				return found;
+			}
+
+			static void Prefix(ref int __0)
+			{
+				int value = __0;
 				int fps = Configuration.serverTargetFps.Value;
 				// Called before ZNet exists (GraphicsSettingsManager.Awake), so the plugin's own check is used.
 				if (fps <= 0 || !ServersidePlugin.IsDedicated())
@@ -109,7 +136,7 @@ namespace Valheim_Serverside.Features
 				{
 					ServersidePlugin.logger.LogInfo($"Server target frame rate: {value} -> {wanted}");
 				}
-				value = wanted;
+				__0 = wanted;
 			}
 		}
 
