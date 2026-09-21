@@ -51,7 +51,7 @@ Compared to Serverside Simulations 1.1.9 (details in the [changelog](CHANGELOG.m
 ## Installation
 
 1. Install [BepInExPack_Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) 5.4.2350 or newer on the dedicated server.
-2. Copy `SarkasticEU_Dedicated_Simulation.dll` from the [latest release](https://github.com/cechacek/valheim-serverside/releases/latest) into `BepInEx/plugins/`.
+2. Copy `SarkasticEU_Dedicated_Simulation.dll` from the [latest release](https://github.com/MistrCech/valheim-serverside/releases/latest) into `BepInEx/plugins/`.
 3. Back up the world and restart the server. `BepInEx/LogOutput.log` should show `Sarkastic.eu Dedicated Simulation installed` and `Vanilla drift check passed`.
 
 Clients need nothing.
@@ -86,7 +86,7 @@ Clients need nothing.
 ## Hosting notes
 
 - **After a game update**, look for `Vanilla ... changed` warnings in the log, and keep world backups.
-- Running under AMP (CubeCoders)? Settings and pitfalls (Sleep mode, stop without save, console commands) are in [cechacek/amp-valheim-bepinex](https://github.com/cechacek/amp-valheim-bepinex).
+- Running under AMP (CubeCoders)? Settings and pitfalls (Sleep mode, stop without save, console commands) are in [MistrCech/amp-valheim-bepinex](https://github.com/MistrCech/amp-valheim-bepinex).
 
 ## Caveats
 

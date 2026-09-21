@@ -10,7 +10,7 @@ cat > manifest.json <<- EOM
   "description": "Run world and monster simulations on a dedicated server. Fork of Serverside Simulations, updated for Valheim 1.0.",
   "version_number": "$SS_VERSION",
   "dependencies": ["denikson-BepInExPack_Valheim-5.4.2350"],
-  "website_url": "https://github.com/cechacek/valheim-serverside"
+  "website_url": "https://github.com/MistrCech/valheim-serverside"
 }
 EOM
 

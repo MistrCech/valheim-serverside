@@ -8,7 +8,7 @@
   "Feature Performance failed to apply and is disabled"). From 1.0.14 on, the server therefore ran
   at the game's 30 FPS, without the even world-update interval, the physics catch-up limit, the
   zone budget and the performance report. The patch now takes every overload of that method and
-  its first argument by position, not by name. Reported by @Merl in cechacek/valheim-serverside#1,
+  its first argument by position, not by name. Reported by @Merl in MistrCech/valheim-serverside#1,
   who found it first and also traced it to 1.0.14.
 
   Checked on 1.0.15 against 1.0.12 with a server simulating a base: a client's `UseDoor` toggles
