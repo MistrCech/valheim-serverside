@@ -98,11 +98,21 @@ namespace Valheim_Serverside.Features
 			private static int s_logged;
 
 			/*
-				Valheim 1.0.15 gave the method a second parameter and renamed the first
+				Valheim 1.0.14 gave the method a second parameter and renamed the first
 				(RequestTargetFrameRate(int targetFrameRate, int targetRefreshRate)), which made a
 				patch written against `int value` fail and took the whole feature down with it. Every
-				overload whose first parameter is the frame rate is patched, and it is taken by
-				position (__0), not by name.
+				overload whose first parameter is the frame rate is patched, and the arguments are
+				taken by position (__args), not by name, so both shapes of the method are served.
+
+				The refresh rate the game should assume is set afterwards, on the field the original
+				just wrote. Left as it arrives (-1 from the preset) the game picks 119.88 Hz when the
+				headless process reports it as supported and 59.94 Hz otherwise, then rounds the frame
+				rate to a whole division of that. For 30 and 60 both paths end at the same number, so
+				this is insurance rather than a gain: asking for the rate we want keeps the result off
+				whatever Screen.resolutions happens to report. Older versions have no such field and
+				are left alone. (Passing the arguments as `object[] __args` instead looks tidier but
+				does not work: the values are copies and never reach the original, which leaves the
+				server at 30 FPS without a word in the log.)
 			*/
 			static IEnumerable<MethodBase> TargetMethods()
 			{
@@ -122,6 +132,8 @@ namespace Valheim_Serverside.Features
 				return found;
 			}
 
+			private static int s_forced;
+
 			static void Prefix(ref int __0)
 			{
 				int value = __0;
@@ -129,6 +141,7 @@ namespace Valheim_Serverside.Features
 				// Called before ZNet exists (GraphicsSettingsManager.Awake), so the plugin's own check is used.
 				if (fps <= 0 || !ServersidePlugin.IsDedicated())
 				{
+					s_forced = 0;
 					return;
 				}
 				int wanted = Mathf.Clamp(fps, 30, 240);
@@ -137,6 +150,33 @@ namespace Valheim_Serverside.Features
 					ServersidePlugin.logger.LogInfo($"Server target frame rate: {value} -> {wanted}");
 				}
 				__0 = wanted;
+				s_forced = wanted;
+			}
+
+			// Looked up once: a game version without them is the older shape of this method, not a fault,
+			// and AccessTools would say so in the log on every call.
+			private static bool s_looked;
+			private static FieldInfo s_refreshRate;
+			private static MethodInfo s_apply;
+
+			static void Postfix(PresentManager __instance)
+			{
+				if (s_forced <= 0 || __instance == null)
+				{
+					return;
+				}
+				if (!s_looked)
+				{
+					s_looked = true;
+					s_refreshRate = typeof(PresentManager).GetField("m_requestedRefreshRate", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+					s_apply = typeof(PresentManager).GetMethod("UpdatePresentSettings", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+				}
+				if (s_refreshRate == null || !(s_refreshRate.GetValue(__instance) is int current) || current == s_forced)
+				{
+					return;
+				}
+				s_refreshRate.SetValue(__instance, s_forced);
+				s_apply?.Invoke(__instance, null);
 			}
 		}
 

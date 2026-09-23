@@ -28,6 +28,9 @@ namespace PluginConfiguration
 		public static ConfigEntry<int> consoleInputCodePage;
 
 		public static ConfigEntry<bool> fixSaveClientChanges;
+		public static ConfigEntry<bool> fixDungeonLoadGuard;
+		public static ConfigEntry<bool> compatVcpSpawnQueue;
+		public static ConfigEntry<bool> compatVcpUnload;
 		public static ConfigEntry<bool> fixTeleportGhosts;
 
 		public static void Load(ConfigFile config)
@@ -78,6 +81,12 @@ namespace PluginConfiguration
 
 			fixSaveClientChanges = config.Bind<bool>("Fixes", "SaveClientChanges", true,
 				"Mark a world chunk as changed when a player's own change to an object arrives, so the next save writes it. Valheim 1.0 only rewrites changed chunks and does not count changes received from players, so what a player just built or moved could be missing after a restart.");
+			fixDungeonLoadGuard = config.Bind<bool>("Fixes", "DungeonLoadGuard", true,
+				"Keep a dungeon whose room bundle fails to load from wedging its zone for good. When Unity refuses a bundle, the game still reports the load as done and then throws, the dungeon never hears back and its zone stays flagged as loading. A vanilla dedicated server never loads dungeons, this mod does. The guard takes over a bundle Unity says is already loaded, reports a load that really failed as failed, and lets such a dungeon go so its zone keeps working and it is tried again next time.");
+			compatVcpSpawnQueue = config.Bind<bool>("Compat", "ValheimCommunityPatchSpawnQueue", false,
+				"Only matters with ValheimCommunityPatch installed. Its spawn queue replaces ZNetScene.CreateObjectsSorted and orders new objects by the server's reference position, which on a dedicated server is the world origin, so this mod's ordering by the nearest player never runs. Off: that patch of ValheimCommunityPatch is removed when the world starts. On: it is kept.");
+			compatVcpUnload = config.Bind<bool>("Compat", "ValheimCommunityPatchUnload", false,
+				"Only matters with ValheimCommunityPatch installed. Its zone-diff unload replaces ZNetScene.RemoveObjects and, whenever the object lists look untouched, drops everything outside the simulation distance of the server's reference position -- the world origin on a dedicated server. With players whose areas do not overlap, objects around them are then destroyed and created again on every pass (dungeons reloading dozens of times a second, doors, beds and items that cannot be used). Off: that patch of ValheimCommunityPatch is removed when the world starts. On: it is kept, and this mod marks its object lists as edited on every pass so that patch takes the game's own unload check.");
 			fixTeleportGhosts = config.Bind<bool>("Fixes", "TeleportGhosts", true,
 				"Tell the players near the old spot to drop a player who teleported away. Valheim 1.0 checks whether an object left their area before it stores the new position, so the teleported player stayed there for them, frozen, until they next crossed a zone line.");
 		}

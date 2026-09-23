@@ -170,6 +170,14 @@ namespace Valheim_Serverside.Features
 
 				RemoveDuplicates(currentObjects);
 				RemoveDuplicates(currentDistantObjects);
+				if (Compat_ValheimCommunityPatch.UnloadKept)
+				{
+					// ValheimCommunityPatch unloads around the reference position when these lists look as the
+					// game filled them, which they do when no peers' areas overlap; a no-op edit sends it down
+					// the game's own unload check instead.
+					currentObjects.Reverse(0, 0);
+					currentDistantObjects.Reverse(0, 0);
+				}
 				__instance.CreateObjects(currentObjects, currentDistantObjects);
 				__instance.RemoveObjects(currentObjects, currentDistantObjects);
 				return false;

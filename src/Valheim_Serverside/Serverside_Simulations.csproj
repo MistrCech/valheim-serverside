@@ -55,6 +55,14 @@
       <HintPath>$(VALHEIM_DEDI_INSTALL)\valheim_server_Data\Managed\UnityEngine.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="SoftReferenceableAssets" Publicize="true">
+      <HintPath>$(VALHEIM_DEDI_INSTALL)\valheim_server_Data\Managed\SoftReferenceableAssets.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AssetBundleModule">
+      <HintPath>$(VALHEIM_DEDI_INSTALL)\valheim_server_Data\Managed\UnityEngine.AssetBundleModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>$(VALHEIM_DEDI_INSTALL)\valheim_server_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>False</Private>
@@ -99,6 +107,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Features\Compat_ValheimPlus.cs" />
+    <Compile Include="Features\Compat_ValheimCommunityPatch.cs" />
+    <Compile Include="Features\DungeonLoadGuard.cs" />
     <Compile Include="Features\Core.cs" />
     <Compile Include="Utils.cs" />
     <Compile Include="Patching.cs" />

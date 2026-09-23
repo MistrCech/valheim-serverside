@@ -1,3 +1,44 @@
+## [1.11.0] - 2026-09-23
+
+### Added
+
+- `[Fixes] DungeonLoadGuard` (on): a dungeon whose room bundle Unity refuses to load no longer
+  wedges its zone. In the game's asset loader a refused bundle ("another AssetBundle with the same
+  files is already loaded") is stored as null and still reported as loaded; the next step throws,
+  the dungeon never hears back, never spawns, and its zone stays flagged as loading -- on a server
+  seen as an endless loop over the same dungeons (ddormer/valheim-serverside#120). Only a server
+  running this mod gets there, since a vanilla dedicated server never loads dungeons. The guard
+  takes over the bundle Unity already holds, reports a load that really failed as failed instead
+  of throwing, and lets a dungeon with a failed room go so its zone keeps working and it is tried
+  again the next time it is created. Checked by opening the forest crypt room bundles behind the
+  loader's back: 1.10.2 logged 13 refusals, threw, and spawned none of three crypts; 1.11.0 took
+  over all 13 bundles and spawned all three.
+- Compatibility with ValheimCommunityPatch, which speeds up the object pass around one point, the
+  server's reference position -- the world origin on a dedicated server -- while this mod simulates
+  around every player:
+  - its zone-diff unload (`ZNetScene.RemoveObjects`) drops everything outside the simulation
+    distance of that point whenever the object lists look as the game filled them, which they do
+    when no players' areas overlap. Objects around the players were then destroyed and created
+    again on every pass: doors, beds and items that could not be used, dungeons reloading dozens of
+    times a second until Unity refused their room bundles as already loaded, once a crash of the
+    server itself (ddormer/valheim-serverside#119, #120). Measured with two players walking
+    between two dungeons: 178 to 1903 dungeon loads at up to 90 a second and hundreds of refused
+    bundles with it, 52 loads and none without it;
+  - its spawn queue (`ZNetScene.CreateObjectsSorted`) orders new objects by distance from that
+    point, so this mod's ordering by the nearest player never ran.
+
+  Neither has a switch of its own; both are removed when the world starts unless
+  `[Compat] ValheimCommunityPatchUnload` / `ValheimCommunityPatchSpawnQueue` keeps them, the rest
+  of ValheimCommunityPatch is left alone. With the unload kept, the object lists are marked as
+  edited on every pass so it takes the game's own unload check, its own path for mods like this
+  one (measured: 52 loads, no errors).
+
+### Changed
+
+- The frame rate patch also sets the refresh rate the game assumes (1.0.14 and later), so 30 and
+  60 FPS no longer depend on what display modes a headless process reports. Idea from @Merl in
+  MistrCech/valheim-serverside#1.
+
 ## [1.10.2] - 2026-09-21
 
 ### Fixed
