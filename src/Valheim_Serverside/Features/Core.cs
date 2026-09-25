@@ -434,91 +434,86 @@ namespace Valheim_Serverside.Features
 		[HarmonyPatch(typeof(RandEventSystem), "FixedUpdate")]
 		public static class RandEventSystem_FixedUpdate_Patch
 		/*
-			Patches out m_localPlayer == null check by reversing the boolean check
-			and instead of:
+			Replaces the check:
 
-				if (this.IsInsideRandomEventArea(this.m_randomEvent, Player.m_localPlayer.transform.position))
+				if (Player.m_localPlayer && this.IsInsideRandomEventArea(this.m_randomEvent, Player.m_localPlayer.transform.position))
 
-			reuses the previously-assigned playerInArea boolean.
+			with:
 
-			Fixes monsters not spawning during events with this mod active.
+				if (this.IsAnyPlayerInEventArea(this.m_randomEvent))
+
+			Player.m_localPlayer is always null on a dedicated server (there is no local player
+			character), so the original check always fails and the event gets deactivated
+			(SetActiveEvent(null, false)) before it can ever go active -- meaning random events
+			(raids) never activate, and therefore their monsters never spawn, on a dedicated server.
+
+			Previously this transpiler looked for an existing call to IsAnyPlayerInEventArea
+			elsewhere in FixedUpdate and reused its cached boolean result instead of writing a
+			fresh call. As of the game update that shipped ~2026-09-19, FixedUpdate no longer
+			calls IsAnyPlayerInEventArea anywhere in its body, so that anchor never matched, this
+			whole transpiler silently no-op'd, and the original m_localPlayer==null check stayed
+			live -- confirmed 2026-09-24 via static IL comparison against the deployed
+			assembly_valheim.dll (monodis dump of RandEventSystem::FixedUpdate showed the raw
+			vanilla null-check block untouched, with no IsAnyPlayerInEventArea call anywhere in
+			the method). No random event had ever gone active on this dedicated server as a
+			result. Fixed by locating the null-check + IsInsideRandomEventArea block directly
+			(by field/method identity, not by reusing an assumed-nearby call) and replacing it
+			with a fresh IsAnyPlayerInEventArea(m_randomEvent) call, so this no longer depends on
+			the vanilla method happening to call it elsewhere first.
 		*/
 		{
-			static Dictionary<OpCode, OpCode> StlocToLdloc = new Dictionary<OpCode, OpCode> {
-				{OpCodes.Stloc_0, OpCodes.Ldloc_0},
-				{OpCodes.Stloc_1, OpCodes.Ldloc_1},
-				{OpCodes.Stloc_2, OpCodes.Ldloc_2},
-				{OpCodes.Stloc_3, OpCodes.Ldloc_3},
-				{OpCodes.Stloc_S, OpCodes.Ldloc_S},
-				{OpCodes.Stloc, OpCodes.Ldloc}
-			};
-
-			static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> _instructions)
+			static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
 			{
-				//var codes = new List<CodeInstruction>(instructions);
-				MethodInfo isAnyPlayerInfo = AccessTools.Method(typeof(RandEventSystem), "IsAnyPlayerInEventArea");
 				FieldInfo field_m_localPlayer = AccessTools.Field(typeof(Player), nameof(Player.m_localPlayer));
 				MethodInfo opImplicitInfo = AccessTools.Method(typeof(UnityEngine.Object), "op_Implicit");
+				MethodInfo isInsideRandomEventAreaInfo = AccessTools.Method(typeof(RandEventSystem), "IsInsideRandomEventArea");
+				MethodInfo isAnyPlayerInfo = AccessTools.Method(typeof(RandEventSystem), "IsAnyPlayerInEventArea");
+				FieldInfo field_m_randomEvent = AccessTools.Field(typeof(RandEventSystem), "m_randomEvent");
 
-				bool foundIsAnyPlayer = false;
-				CodeInstruction ldPlayerInArea = null;
+				var matcher = new CodeMatcher(instructions);
 
-				List<CodeInstruction> instructions = _instructions.ToList();
-				List<CodeInstruction> new_instructions = _instructions.ToList();
-
-				var insideRandomEventAreaCheck = new SequentialInstructions(new List<CodeInstruction>(new CodeInstruction[]
+				// Find "if (Player.m_localPlayer) { ... }" -- the truthiness check on m_localPlayer.
+				matcher.MatchForward(false,
+					new CodeMatch(OpCodes.Ldsfld, field_m_localPlayer),
+					new CodeMatch(OpCodes.Call, opImplicitInfo),
+					new CodeMatch(OpCodes.Brfalse)
+				);
+				if (!matcher.IsValid)
 				{
-					new CodeInstruction(OpCodes.Ldarg_0),
-					new CodeInstruction(OpCodes.Ldarg_0),
-					new CodeInstruction(OpCodes.Ldfld),
-					new CodeInstruction(OpCodes.Ldsfld),
-					new CodeInstruction(OpCodes.Callvirt),
-					new CodeInstruction(OpCodes.Callvirt),
-					new CodeInstruction(OpCodes.Call)
-				}));
-				for (int i = 0; i < instructions.Count; i++)
-				{
-					CodeInstruction instruction = instructions[i];
-
-					if (instruction.OperandIs(isAnyPlayerInfo))
-					{
-						//ZLog.Log("isAnyPlayerInfo");
-						foundIsAnyPlayer = true;
-					}
-					else if (foundIsAnyPlayer && instruction.IsStloc())
-					{
-						//ZLog.Log("foundIsAnyPlayer && IsStloc");
-						ldPlayerInArea = instruction.Clone();
-						ldPlayerInArea.opcode = StlocToLdloc[instruction.opcode];
-						foundIsAnyPlayer = false;
-					}
-					else if (ldPlayerInArea != null && insideRandomEventAreaCheck.Check(instruction))
-					{
-						//ZLog.Log("Removing a lot and inserting ldPlayerInArea");
-						int count = insideRandomEventAreaCheck.Sequential.Count;
-						int startIdx = i - (count - 1);
-						new_instructions.RemoveRange(startIdx, count);
-						new_instructions.Insert(startIdx, ldPlayerInArea);
-						break;
-					}
+					ServersidePlugin.logger.LogError("RandEventSystem.FixedUpdate transpiler: m_localPlayer null-check pattern not found -- patch NOT applied, random events will not activate on this dedicated server. Game code may have changed again; needs re-diffing against the live assembly.");
+					return instructions;
 				}
+				int startPos = matcher.Pos;
 
-				var localPlayerCheck = new SequentialInstructions(new List<CodeInstruction>(new CodeInstruction[]
+				// From there, find the IsInsideRandomEventArea(...) call and the branch right after it.
+				matcher.MatchForward(false,
+					new CodeMatch(OpCodes.Call, isInsideRandomEventAreaInfo)
+				);
+				if (!matcher.IsValid)
 				{
-					new CodeInstruction(OpCodes.Ldsfld, field_m_localPlayer),
-					new CodeInstruction(OpCodes.Call, opImplicitInfo),
-					new CodeInstruction(OpCodes.Brfalse)
-				}));
-				for (int i = 0; i < new_instructions.Count; i++)
-				{
-					CodeInstruction instruction = new_instructions[i];
-					if (localPlayerCheck.Check(instruction))
-					{
-						yield return new CodeInstruction(OpCodes.Brtrue, instruction.operand);
-						continue;
-					}
-					yield return instruction;
+					ServersidePlugin.logger.LogError("RandEventSystem.FixedUpdate transpiler: IsInsideRandomEventArea call not found -- patch NOT applied, random events will not activate on this dedicated server. Game code may have changed again; needs re-diffing against the live assembly.");
+					return instructions;
 				}
+				matcher.Advance(1);
+				if (!matcher.IsValid || !matcher.Instruction.Branches(out System.Reflection.Emit.Label? branchTarget) || branchTarget == null)
+				{
+					ServersidePlugin.logger.LogError("RandEventSystem.FixedUpdate transpiler: expected branch after IsInsideRandomEventArea call not found -- patch NOT applied, random events will not activate on this dedicated server. Game code may have changed again; needs re-diffing against the live assembly.");
+					return instructions;
+				}
+				int endPos = matcher.Pos;
+
+				return matcher
+					.Start()
+					.Advance(startPos)
+					.RemoveInstructions(endPos - startPos + 1)
+					.InsertAndAdvance(
+						new CodeInstruction(OpCodes.Ldarg_0),
+						new CodeInstruction(OpCodes.Ldarg_0),
+						new CodeInstruction(OpCodes.Ldfld, field_m_randomEvent),
+						new CodeInstruction(OpCodes.Call, isAnyPlayerInfo),
+						new CodeInstruction(OpCodes.Brfalse, branchTarget.Value)
+					)
+					.InstructionEnumeration();
 			}
 		}
 
