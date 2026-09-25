@@ -162,8 +162,15 @@ namespace Valheim_Serverside.Features
 				// 1.0: one SimulationDistance replaces m_activeArea/m_activeDistantArea. Vanilla reads
 				// the synced value from ZNet here, not ZoneSystem's copy.
 				SimulationDistance distance = ZNet.instance.GetSyncedSimulationDistance();
-				foreach (ZNetPeer znetPeer in ZNet.instance.GetConnectedPeers())
+				foreach (ZNetPeer znetPeer in ZNet.instance.GetPeers())
 				{
+					// A peer is listed from the moment it connects, while its player is still logging in
+					// (version check, password). Until then it has no position: GetRefPos() is the world
+					// origin. Every per-peer loop in this mod skips such peers.
+					if (!znetPeer.IsReady())
+					{
+						continue;
+					}
 					Vector2s zone = ZoneSystem.GetZone(znetPeer.GetRefPos());
 					ZDOMan.instance.FindSectorObjects(zone, distance, currentObjects, currentDistantObjects);
 				}
@@ -235,7 +242,10 @@ namespace Valheim_Serverside.Features
 					s_peerPositions.Clear();
 					foreach (ZNetPeer peer in ZNet.instance.GetPeers())
 					{
-						s_peerPositions.Add(peer.GetRefPos());
+						if (peer.IsReady())
+						{
+							s_peerPositions.Add(peer.GetRefPos());
+						}
 					}
 				}
 				if (s_peerPositions.Count == 0)
@@ -269,6 +279,10 @@ namespace Valheim_Serverside.Features
 				int near = distance.NearSimulationDistance;
 				foreach (ZNetPeer peer in ZNet.instance.GetPeers())
 				{
+					if (!peer.IsReady())
+					{
+						continue;
+					}
 					Vector2s zone = ZoneSystem.GetZone(peer.GetRefPos());
 					for (int i = zone.y - near; i <= zone.y + near; i++)
 					{
@@ -364,6 +378,10 @@ namespace Valheim_Serverside.Features
 				for (int n = 0; n < count && spawned < budget; n++)
 				{
 					int index = (s_nextPeer + n) % count;
+					if (!peers[index].IsReady())
+					{
+						continue;
+					}
 					Vector3 position = peers[index].GetRefPos();
 					if (ghost ? zoneSystem.CreateGhostZones(position) : zoneSystem.CreateLocalZones(position))
 					{
@@ -408,7 +426,7 @@ namespace Valheim_Serverside.Features
 					bool anyPlayerInArea = false;
 					foreach (ZNetPeer peer in ZNet.instance.GetPeers())
 					{
-						if (ZNetScene.InActiveArea(position, ZoneSystem.GetZone(peer.GetRefPos())))
+						if (peer.IsReady() && ZNetScene.InActiveArea(position, ZoneSystem.GetZone(peer.GetRefPos())))
 						{
 							anyPlayerInArea = true;
 							break;
@@ -434,91 +452,88 @@ namespace Valheim_Serverside.Features
 		[HarmonyPatch(typeof(RandEventSystem), "FixedUpdate")]
 		public static class RandEventSystem_FixedUpdate_Patch
 		/*
-			Patches out m_localPlayer == null check by reversing the boolean check
-			and instead of:
+			A random event only becomes active where the game sees a player inside its area:
 
-				if (this.IsInsideRandomEventArea(this.m_randomEvent, Player.m_localPlayer.transform.position))
+				else if (m_randomEvent != null && (bool)Player.m_localPlayer)
+				{
+					if (IsInsideRandomEventArea(m_randomEvent, Player.m_localPlayer.transform.position))
+						SetActiveEvent(m_randomEvent);
+					...
 
-			reuses the previously-assigned playerInArea boolean.
+			A dedicated server has no local player, so the event never became active on it and the
+			server-owned spawners around players never spawned the raid. This reverses the local-player
+			check and, instead of the local player's position, uses `playerInArea`, the result of
+			IsAnyPlayerInEventArea(m_randomEvent) that FixedUpdate computes a few lines earlier on the
+			server.
 
-			Fixes monsters not spawning during events with this mod active.
+			All three sites are found by the field and method they use. If any of them is missing the
+			method is left as it is and a warning says which: reversing the check without replacing the
+			local player's position would throw on every fixed step of an event.
 		*/
 		{
-			static Dictionary<OpCode, OpCode> StlocToLdloc = new Dictionary<OpCode, OpCode> {
-				{OpCodes.Stloc_0, OpCodes.Ldloc_0},
-				{OpCodes.Stloc_1, OpCodes.Ldloc_1},
-				{OpCodes.Stloc_2, OpCodes.Ldloc_2},
-				{OpCodes.Stloc_3, OpCodes.Ldloc_3},
-				{OpCodes.Stloc_S, OpCodes.Ldloc_S},
-				{OpCodes.Stloc, OpCodes.Ldloc}
-			};
-
-			static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> _instructions)
+			static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
 			{
-				//var codes = new List<CodeInstruction>(instructions);
-				MethodInfo isAnyPlayerInfo = AccessTools.Method(typeof(RandEventSystem), "IsAnyPlayerInEventArea");
-				FieldInfo field_m_localPlayer = AccessTools.Field(typeof(Player), nameof(Player.m_localPlayer));
-				MethodInfo opImplicitInfo = AccessTools.Method(typeof(UnityEngine.Object), "op_Implicit");
+				MethodInfo isAnyPlayerInEventArea = AccessTools.Method(typeof(RandEventSystem), "IsAnyPlayerInEventArea");
+				MethodInfo isInsideRandomEventArea = AccessTools.Method(typeof(RandEventSystem), "IsInsideRandomEventArea");
+				MethodInfo opImplicit = AccessTools.Method(typeof(UnityEngine.Object), "op_Implicit");
+				MethodInfo getTransform = AccessTools.PropertyGetter(typeof(Component), nameof(Component.transform));
+				MethodInfo getPosition = AccessTools.PropertyGetter(typeof(Transform), nameof(Transform.position));
+				FieldInfo localPlayer = AccessTools.Field(typeof(Player), nameof(Player.m_localPlayer));
+				FieldInfo randomEvent = AccessTools.Field(typeof(RandEventSystem), "m_randomEvent");
+				List<CodeInstruction> codes = instructions.ToList();
 
-				bool foundIsAnyPlayer = false;
-				CodeInstruction ldPlayerInArea = null;
+				// bool playerInArea = IsAnyPlayerInEventArea(m_randomEvent);
+				int anyPlayer = codes.FindIndex(code => code.Calls(isAnyPlayerInEventArea));
+				CodeInstruction loadPlayerInArea = anyPlayer >= 0 && anyPlayer + 1 < codes.Count ? LoadOf(codes[anyPlayer + 1]) : null;
 
-				List<CodeInstruction> instructions = _instructions.ToList();
-				List<CodeInstruction> new_instructions = _instructions.ToList();
-
-				var insideRandomEventAreaCheck = new SequentialInstructions(new List<CodeInstruction>(new CodeInstruction[]
+				// (bool)Player.m_localPlayer, the condition of the block that activates the event
+				int check = -1;
+				for (int i = Math.Max(anyPlayer, 0); i + 2 < codes.Count && loadPlayerInArea != null; i++)
 				{
-					new CodeInstruction(OpCodes.Ldarg_0),
-					new CodeInstruction(OpCodes.Ldarg_0),
-					new CodeInstruction(OpCodes.Ldfld),
-					new CodeInstruction(OpCodes.Ldsfld),
-					new CodeInstruction(OpCodes.Callvirt),
-					new CodeInstruction(OpCodes.Callvirt),
-					new CodeInstruction(OpCodes.Call)
-				}));
-				for (int i = 0; i < instructions.Count; i++)
-				{
-					CodeInstruction instruction = instructions[i];
-
-					if (instruction.OperandIs(isAnyPlayerInfo))
+					if (codes[i].LoadsField(localPlayer) && codes[i + 1].Calls(opImplicit)
+						&& (codes[i + 2].opcode == OpCodes.Brfalse || codes[i + 2].opcode == OpCodes.Brfalse_S))
 					{
-						//ZLog.Log("isAnyPlayerInfo");
-						foundIsAnyPlayer = true;
-					}
-					else if (foundIsAnyPlayer && instruction.IsStloc())
-					{
-						//ZLog.Log("foundIsAnyPlayer && IsStloc");
-						ldPlayerInArea = instruction.Clone();
-						ldPlayerInArea.opcode = StlocToLdloc[instruction.opcode];
-						foundIsAnyPlayer = false;
-					}
-					else if (ldPlayerInArea != null && insideRandomEventAreaCheck.Check(instruction))
-					{
-						//ZLog.Log("Removing a lot and inserting ldPlayerInArea");
-						int count = insideRandomEventAreaCheck.Sequential.Count;
-						int startIdx = i - (count - 1);
-						new_instructions.RemoveRange(startIdx, count);
-						new_instructions.Insert(startIdx, ldPlayerInArea);
+						check = i + 2;
 						break;
 					}
 				}
 
-				var localPlayerCheck = new SequentialInstructions(new List<CodeInstruction>(new CodeInstruction[]
+				// IsInsideRandomEventArea(m_randomEvent, Player.m_localPlayer.transform.position)
+				int inside = check >= 0 ? codes.FindIndex(check, code => code.Calls(isInsideRandomEventArea)) : -1;
+				int first = inside - 6;
+				bool insideMatches = first > check
+					&& codes[first].IsLdarg(0) && codes[first + 1].IsLdarg(0) && codes[first + 2].LoadsField(randomEvent)
+					&& codes[first + 3].LoadsField(localPlayer) && codes[first + 4].Calls(getTransform) && codes[first + 5].Calls(getPosition);
+
+				if (loadPlayerInArea == null || check < 0 || !insideMatches)
 				{
-					new CodeInstruction(OpCodes.Ldsfld, field_m_localPlayer),
-					new CodeInstruction(OpCodes.Call, opImplicitInfo),
-					new CodeInstruction(OpCodes.Brfalse)
-				}));
-				for (int i = 0; i < new_instructions.Count; i++)
-				{
-					CodeInstruction instruction = new_instructions[i];
-					if (localPlayerCheck.Check(instruction))
-					{
-						yield return new CodeInstruction(OpCodes.Brtrue, instruction.operand);
-						continue;
-					}
-					yield return instruction;
+					string missing = loadPlayerInArea == null ? "the IsAnyPlayerInEventArea result"
+						: check < 0 ? "the local player check" : "the IsInsideRandomEventArea call for the local player";
+					ServersidePlugin.logger.LogWarning($"{__originalMethod.DeclaringType.Name}.{__originalMethod.Name}: {missing} not found; left unchanged, so random events will not become active on the server. The game changed this method; the patch needs reviewing.");
+					return codes;
 				}
+
+				codes[check].opcode = codes[check].opcode == OpCodes.Brfalse_S ? OpCodes.Brtrue_S : OpCodes.Brtrue;
+				for (int i = first; i <= inside; i++)
+				{
+					loadPlayerInArea.labels.AddRange(codes[i].labels);
+					loadPlayerInArea.blocks.AddRange(codes[i].blocks);
+				}
+				codes.RemoveRange(first, inside - first + 1);
+				codes.Insert(first, loadPlayerInArea);
+				return codes;
+			}
+
+			// ldloc for the local a stloc stores to; null if the instruction is not a stloc.
+			private static CodeInstruction LoadOf(CodeInstruction store)
+			{
+				if (store.opcode == OpCodes.Stloc_0) return new CodeInstruction(OpCodes.Ldloc_0);
+				if (store.opcode == OpCodes.Stloc_1) return new CodeInstruction(OpCodes.Ldloc_1);
+				if (store.opcode == OpCodes.Stloc_2) return new CodeInstruction(OpCodes.Ldloc_2);
+				if (store.opcode == OpCodes.Stloc_3) return new CodeInstruction(OpCodes.Ldloc_3);
+				if (store.opcode == OpCodes.Stloc_S) return new CodeInstruction(OpCodes.Ldloc_S, store.operand);
+				if (store.opcode == OpCodes.Stloc) return new CodeInstruction(OpCodes.Ldloc, store.operand);
+				return null;
 			}
 		}
 
@@ -527,7 +542,8 @@ namespace Valheim_Serverside.Features
 			Return spawners if there are nearby players in the event area.
 		*/
 		{
-			if (instance.m_activeEvent == null)
+			RandomEvent activeEvent = instance.m_activeEvent;
+			if (activeEvent == null)
 			{
 				return null;
 			}
@@ -536,7 +552,7 @@ namespace Valheim_Serverside.Features
 			foreach (Player player in Player.GetAllPlayers())
 			{
 				if (ZNetScene.InActiveArea(spawnSystemPosition, ZoneSystem.GetZone(player.transform.position))
-					&& instance.IsInsideRandomEventArea(instance.m_randomEvent, player.transform.position))
+					&& instance.IsInsideRandomEventArea(activeEvent, player.transform.position))
 				{
 					return instance.GetCurrentSpawners();
 				}
@@ -547,37 +563,44 @@ namespace Valheim_Serverside.Features
 		[HarmonyPatch(typeof(SpawnSystem), "UpdateSpawning")]
 		public static class SpawnSystem_UpdateSpawning_Patch
 		/*
-			Patches out m_localPlayer == null check in SpawnSystem.UpdateSpawning
-			by reversing the boolean check.
+			UpdateSpawning returns at once when there is no local player, so on a dedicated server
+			the spawners it owns -- all of them around players with this mod -- never spawned. The
+			check is reversed, and the event's spawners come from Core.GetCurrentSpawners, which
+			looks at every player instead of the local one.
 
-			Fixes enemies not spawning during random events.
+			Both sites or neither: if one is missing the method is left as it is, with a warning.
 		*/
 		{
-			static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> _instructions)
+			static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
 			{
-				return new CodeMatcher(_instructions)
-					// Reverse Player.m_localPlayer == false check to allow function to run on dedicated server
+				List<CodeInstruction> original = instructions.ToList();
+				CodeMatcher matcher = new CodeMatcher(original)
 					.MatchForward(true,
 						new CodeMatch(OpCodes.Ldsfld, AccessTools.Field(typeof(Player), nameof(Player.m_localPlayer))),
 						new CodeMatch(OpCodes.Ldnull),
 						new CodeMatch(OpCodes.Call, AccessTools.Method(typeof(UnityEngine.Object), "op_Equality")),
-						new CodeMatch(OpCodes.Brfalse)
-					)
-					.SetOpcodeAndAdvance(OpCodes.Brtrue)
-
-					// Replace RandEventSystem.GetCurrentSpawners call with call to our method.
-					.MatchForward(false,
+						new CodeMatch(instruction => instruction.opcode == OpCodes.Brfalse || instruction.opcode == OpCodes.Brfalse_S)
+					);
+				bool check = matcher.IsValid;
+				if (check)
+				{
+					// if (Player.m_localPlayer == null) return;  ->  if (Player.m_localPlayer != null) return;
+					matcher.Opcode = matcher.Opcode == OpCodes.Brfalse_S ? OpCodes.Brtrue_S : OpCodes.Brtrue;
+					matcher.MatchForward(false,
 						new CodeMatch(OpCodes.Callvirt, AccessTools.Method(typeof(RandEventSystem), nameof(RandEventSystem.GetCurrentSpawners)))
-					)
-					.RemoveInstruction()
-					.Insert(
-						// Arg 0 is SpawnSystem instance; push to stack (2nd arg to Core.GetCurrentSpawners)
-						new CodeInstruction(OpCodes.Ldarg_0),
-						new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(Core), nameof(Core.GetCurrentSpawners)))
-					)
-
-					.InstructionEnumeration()
-				;
+					);
+				}
+				if (!check || !matcher.IsValid)
+				{
+					string missing = !check ? "the local player check" : "the RandEventSystem.GetCurrentSpawners call";
+					ServersidePlugin.logger.LogWarning($"{__originalMethod.DeclaringType.Name}.{__originalMethod.Name}: {missing} not found; left unchanged, so the server will not spawn creatures. The game changed this method; the patch needs reviewing.");
+					return original;
+				}
+				// RandEventSystem.instance.GetCurrentSpawners()  ->  Core.GetCurrentSpawners(RandEventSystem.instance, this)
+				matcher.Opcode = OpCodes.Call;
+				matcher.Operand = AccessTools.Method(typeof(Core), nameof(Core.GetCurrentSpawners));
+				matcher.Insert(new CodeInstruction(OpCodes.Ldarg_0));
+				return matcher.InstructionEnumeration();
 			}
 		}
 
@@ -587,7 +610,7 @@ namespace Valheim_Serverside.Features
 			Originally uses `ZNet.GetReferencePosition` to determine active area but with the server 
 			handling all areas, it must check if the `Vector3` is within any of the peers' active areas.
 
-			Returns `false` if the point is within *any* of the peers' active areas and `false` otherwise.
+			Returns `false` if the point is within *any* of the peers' active areas and `true` otherwise.
 
 			SpawnArea (e.g BonePileSpawner) uses `OutsideActiveArea` to determine if it should be simulated.
 		*/
@@ -600,7 +623,7 @@ namespace Valheim_Serverside.Features
 					// OutsideActiveArea(Vector3, Vector3) is gone in 1.0 -- only
 					// (Vector3) and (Vector3, Vector2s) remain, so pass the peer's
 					// zone instead of their raw position.
-					if (!ZNetScene.OutsideActiveArea(point, ZoneSystem.GetZone(znetPeer.GetRefPos())))
+					if (znetPeer.IsReady() && !ZNetScene.OutsideActiveArea(point, ZoneSystem.GetZone(znetPeer.GetRefPos())))
 					{
 						__result = false;
 					}
@@ -652,24 +675,6 @@ namespace Valheim_Serverside.Features
 			}
 		}
 
-		[HarmonyPatch(typeof(WearNTear), "UpdateSupport")]
-		public static class WearNTear_UpdateSupport_Patch
-		/*
-			Call `SetupColliders` if `WearNTear.m_bounds` is not set but `WearNTear.m_colliders` are set.
-			
-
-			The underlying reason is currently not known, and requires further investigation.
-		 */
-		{
-			static void Prefix(ref WearNTear __instance)
-			{
-				if (__instance.m_colliders != null && __instance.m_bounds == null)
-				{
-					__instance.SetupColliders();
-				}
-			}
-		}
-
 		[HarmonyPatch(typeof(Ship), "UpdateOwner")]
 		public static class Ship_UpdateOwner_Patch
 		/*
@@ -689,6 +694,11 @@ namespace Valheim_Serverside.Features
 		{
 			static bool Prefix(ref Ship __instance)
 			{
+				// Vanilla's own check: the timer keeps running for a moment after the ship is removed.
+				if (!__instance.m_nview.IsValid())
+				{
+					return false;
+				}
 				ZDO zdo = __instance.m_nview.GetZDO();
 				// Don't do anything if a player is using ship's container
 				if (zdo.GetInt("InUse", 0) == 0)

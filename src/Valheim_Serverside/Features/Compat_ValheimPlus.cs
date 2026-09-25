@@ -16,11 +16,20 @@ namespace Valheim_Serverside.Features
 			haveValheimPlus = Chainloader.PluginInfos.ContainsKey(ServersidePlugin.ValheimPlusPluginId);
 			if (haveValheimPlus)
 			{
-				TryPatchInventoryAssistant();
-				ServersidePlugin.harmony.Patch(
-					AccessTools.Method(typeof(ZNetScene), "Awake"),
-					postfix: new HarmonyMethod(typeof(ZNetScene_Awake_Patch), nameof(ZNetScene_Awake_Patch.Postfix))
-				);
+				// Patched here, outside the per-feature safety net, so a ValheimPlus version these
+				// transpilers do not fit must not take the rest of the mod down with it.
+				try
+				{
+					TryPatchInventoryAssistant();
+					ServersidePlugin.harmony.Patch(
+						AccessTools.Method(typeof(ZNetScene), "Awake"),
+						postfix: new HarmonyMethod(typeof(ZNetScene_Awake_Patch), nameof(ZNetScene_Awake_Patch.Postfix))
+					);
+				}
+				catch (Exception e)
+				{
+					ServersidePlugin.logger.LogError($"ValheimPlus compatibility could not be applied (InventoryAssistant): {e}");
+				}
 			}
 		}
 
@@ -41,8 +50,15 @@ namespace Valheim_Serverside.Features
 				// Only attempt to patch once.
 				if (!triedToPatchSmelter)
 				{
-					TryPatchSmelter();
 					triedToPatchSmelter = true;
+					try
+					{
+						TryPatchSmelter();
+					}
+					catch (Exception e)
+					{
+						ServersidePlugin.logger.LogError($"ValheimPlus compatibility could not be applied (Smelter): {e}");
+					}
 				}
 			}
 		}

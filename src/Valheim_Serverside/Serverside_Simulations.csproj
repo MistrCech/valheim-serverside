@@ -125,7 +125,6 @@
     <Compile Include="ConsoleInput.cs" />
     <Compile Include="VanillaDrift.cs" />
     <Compile Include="Configuration.cs" />
-    <Compile Include="SequentialInstructions.cs" />
     <Compile Include="ServersidePlugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

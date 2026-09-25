@@ -34,7 +34,11 @@ namespace Valheim_Serverside.Features
 				}
 				else if (text.StartsWith("maxobjects"))
 				{
-					Configuration.maxObjectsPerFrame.Value = Convert.ToInt32(text.Split(' ').GetValue(1));
+					string[] words = text.Split(' ');
+					if (words.Length > 1 && int.TryParse(words[1], out int value))
+					{
+						Configuration.maxObjectsPerFrame.Value = value;
+					}
 				}
 			}
 		}

@@ -1,3 +1,45 @@
+## [1.11.1] - 2026-09-25
+
+An audit of every patch against Valheim 1.0.15 and 1.0.12, prompted by MistrCech/valheim-serverside#2.
+That pull request's premise does not hold -- the only public build, 1.0.15 (25390671, 18 September
+2026), still calls `IsAnyPlayerInEventArea` in `RandEventSystem.FixedUpdate`, and raids go active on
+it with this mod -- but the patch was fragile in the way it describes.
+
+### Fixed
+
+- Random events: the `RandEventSystem.FixedUpdate` patch finds the three sites it needs by the field
+  and method each uses and changes the method completely or not at all, with a warning naming what
+  is missing. Before, if a game update moved the call it reuses, it did nothing without a word -- or
+  reversed the local player check without replacing the local player's position, which would throw
+  on every fixed step of an event. Checked by blanking each site in the real IL: 1.11.0 reversed the
+  check alone in two of three cases, 1.11.1 left the method unchanged and warned in all three. The
+  same for `SpawnSystem.UpdateSpawning`, whose patch threw instead and so switched off the whole mod.
+- Players still logging in (version check, password) no longer count as players standing at the
+  world origin. Every per-player loop counted them, so while someone sat at the password prompt the
+  server loaded the zones around the origin and simulated what is there. Measured with a player who
+  never finishes logging in: 1.11.0 loaded the origin zone and 9 objects around it, 1.11.1 nothing.
+- `Ship.UpdateOwner` checks that the ship still has its network object, as vanilla does: the timer
+  can fire in the frame the ship is removed.
+- Event spawners check the player against the active event, the one whose spawners they get,
+  instead of the random event.
+- ValheimPlus compatibility is patched outside the per-feature safety net, so a ValheimPlus version
+  its patches do not fit threw out of startup and left the whole mod unpatched. It is now logged and
+  the rest applies.
+- `[Fixes] DungeonLoadGuard` runs after ValheimCommunityPatch's own fix for failed dungeon rooms, as
+  its description always said; before, that depended on the plugins' load order.
+
+### Changed
+
+- `[MaxObjectsPerFrame] MaxObjects` accepts 1 to 10000 (0 or less throttled creation to about one
+  object per frame), and its description says what a vanilla dedicated server does: 100.
+- The vanilla drift check also watches `ZNetScene.OutsideActiveArea` and is reviewed for 1.0.15.
+
+### Removed
+
+- The `WearNTear.UpdateSupport` prefix. It called `SetupColliders` when `m_colliders` was set and
+  `m_bounds` was not, but the game only ever sets both together, so it never did anything -- on every
+  building piece's support update.
+
 ## [1.11.0] - 2026-09-23
 
 ### Added

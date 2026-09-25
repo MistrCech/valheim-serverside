@@ -38,7 +38,9 @@ namespace PluginConfiguration
 			modEnabled = config.Bind<bool>("General", "Enabled", true, "Enable or disable the mod");
 
 			maxObjectsPerFrameEnabled = config.Bind<bool>("MaxObjectsPerFrame", "Enabled", true, "Enable or disable the feature");
-			maxObjectsPerFrame = config.Bind<int>("MaxObjectsPerFrame", "MaxObjects", 100, "Maximum number of objects the server can create per frame.");
+			maxObjectsPerFrame = config.Bind<int>("MaxObjectsPerFrame", "MaxObjects", 100,
+				new ConfigDescription("Maximum number of objects the server can create per frame. A vanilla dedicated server creates 100 (the game's loading-screen rate: a server has no player of its own); lower values make areas fill in more slowly.",
+					new AcceptableValueRange<int>(1, 10000)));
 
 			networkingEnabled = config.Bind<bool>("Networking", "Enabled", true,
 				"Raise the limits on how fast the server sends world data to each player (server-side part of BetterNetworking). Needs a restart.");

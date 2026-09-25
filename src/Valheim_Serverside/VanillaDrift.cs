@@ -19,7 +19,7 @@ namespace Valheim_Serverside
 	*/
 	public static class VanillaDrift
 	{
-		public const string ReviewedForGameVersion = "1.0.7";
+		public const string ReviewedForGameVersion = "1.0.15";
 
 		private static readonly Dictionary<MethodBase, string[]> Expected = new Dictionary<MethodBase, string[]>
 		{
@@ -45,6 +45,9 @@ namespace Valheim_Serverside
 			} },
 			{ AccessTools.Method(typeof(ZDOMan), "SendZDOToPeers2"), new[] {
 				"ZDOMan::SendZDOs",
+			} },
+			{ AccessTools.Method(typeof(ZNetScene), "OutsideActiveArea", new[] { typeof(UnityEngine.Vector3) }), new[] {
+				"ZNet::GetReferencePosition", "ZNet::get_instance", "ZNetScene::OutsideActiveArea", "ZoneSystem::GetZone",
 			} },
 			{ AccessTools.Method(typeof(Ship), "UpdateOwner"), new[] {
 				"Ship::GetNewOwnerID", "Ship::IsPlayerInBoat", "Ship::RefreshPlayerList", "ZDO::SetOwner",
