@@ -43,9 +43,10 @@ Compared to Serverside Simulations 1.1.9 (details in the [changelog](CHANGELOG.m
 - **Cap on Unity job worker threads**, which otherwise idle at CPU cost on many-core hosts.
 - **Fix: player changes that the save skipped.** Valheim 1.0 rewrites only the world chunks it marked as changed, and a change received from a player marks nothing, so what a player just built or moved could be missing after a restart.
 - **Fix: teleported players left behind as ghosts.** A player who portalled or respawned stayed visible to the players near the old spot, frozen, until they next crossed a zone line, because Valheim 1.0 checks whether an object left their area before it stores the new position.
-- **Admin commands on the server console:** `give <item> <amount> <player>`, `broadcast <text>`, `event <name> <player>`, `players`, `save`, `stop`, typed into the panel the server runs in (AMP), and anything else goes to the game's own console (`kick`, `ban`, `banned`, `stopevent`, and after `devcommands` the cheats that need no player: `skiptime`, `setkey`, `resetkeys` ...). A vanilla dedicated server never reads its console, and Valheim 1.0 does not let a player on a dedicated server use `spawn` from the game console, admin or not.
+- **Admin commands on the server console:** `give <item> <amount> <player>`, `broadcast <text>`, `event <name> <player>`, `players`, `characters`, `allow <name>`, `save`, `stop`, typed into the panel the server runs in (AMP), and anything else goes to the game's own console (`kick`, `ban`, `banned`, `stopevent`, `setkey`, `removekey`, and after `devcommands` the cheats that need no player: `skiptime`, `listkeys`, `resetkeys` ...). A vanilla dedicated server never reads its console, and Valheim 1.0 does not let a player on a dedicated server use `spawn` from the game console, admin or not.
 - **Smoother server frames:** world updates reach every player at a steady interval however many are online, one slow frame no longer makes the next one slow through physics catch-up, and new zones are generated one per tick instead of one per exploring player. A periodic log shows frame times and what they are spent on.
 - **`save` and `stop` console commands** for server panels that write to standard input.
+- **Character guard** (off by default): a check on the characters players join with, server-side only, so clients stay vanilla. A character this world has not seen must be fresh, and a known one that comes back changed was played elsewhere -- see below.
 - **Safety:** a startup check warns when a vanilla method the mod replaces has changed in a game update; if the core patches cannot be applied, the mod removes itself and the server runs vanilla.
 
 ## Installation
@@ -84,7 +85,24 @@ Clients need nothing.
 | `[Fixes] DungeonLoadGuard` | true | Keep a dungeon whose room bundle fails to load from wedging its zone. When Unity refuses a bundle as already loaded, the game still reports the load as done and then throws, so the dungeon never spawns and its zone stays flagged as loading. The guard uses the bundle Unity already holds, reports a load that really failed as failed, and lets such a dungeon go so it is tried again next time. A vanilla dedicated server never loads dungeons; this mod does. |
 | `[Compat] ValheimCommunityPatchUnload` | false | Only with ValheimCommunityPatch installed. Its zone-diff unload drops objects outside the simulation distance of the server's reference position -- the world origin -- so objects around players are destroyed and created again on every pass. Off: that patch of it is removed when the world starts. On: it is kept, and the object lists are marked as edited on every pass so it takes the game's own unload check. |
 | `[Compat] ValheimCommunityPatchSpawnQueue` | false | Only with ValheimCommunityPatch installed. Its spawn queue orders new objects by distance from the world origin, so this mod's nearest-player ordering never runs. Off: that patch of it is removed when the world starts. On: it is kept. |
+| `[CharacterGuard] Enabled` | false | Check the characters players join with (see Character guard below). |
+| `[CharacterGuard] NewCharacters` | RequireFresh | `RequireFresh`: a character this world has not seen must still be ready for Eikthyr's raid and wear nothing beyond a level 1 workbench. `Allow`: every new character is let in and remembered. |
+| `[CharacterGuard] NewCharacterAction` | Kick | For a new character that is not fresh: `Kick` (after a message on their screen), `Log` or `Ignore`. |
+| `[CharacterGuard] ChangedAway` | Log | For a known character that comes back wearing something new or with other progress: `Log`, `Kick` or `Ignore`. |
+| `[CharacterGuard] ExemptAdmins` | true | Admins are never checked. |
+| `[CharacterGuard] NewCharacterMessage` / `ChangedAwayMessage` | (English text) | Shown in the middle of the player's screen before the kick. |
 | `[Performance] StatsIntervalMinutes` | 5 | How often to log FPS, frame times, physics steps per frame, the cost of world updates and zone generation, and what the slowest frame was doing, while players are online. 0 disables. |
+
+## Character guard
+
+Valheim keeps a character on the player's own computer and a vanilla client never sends its inventory to the server, so no server-side mod can read or replace what a character carries. The server does see a character's id (the same on every world), what it wears and holds (both hands, back slots, armour, utility, trinket, with the upgrade level of weapons), and the raids it is ready for, which the game works out from the items the character knows and the bosses it has beaten. The guard uses that:
+
+- **New characters** -- not in this world's list and without anything built, a bed or a tombstone here -- must be fresh: still ready for Eikthyr's raid (the game stops that once a character knows the antler, bronze or iron pickaxe, hard antler or Eikthyr's trophy) and wearing nothing beyond what a level 1 workbench makes. A character brought in with progress from another world gets a message and is kicked 8 seconds later (`NewCharacterAction`).
+- **Known characters** that come back wearing something they did not have when they left, or ready for other raids than then, were played somewhere else in between; that is logged (`ChangedAway`, or kicked).
+- Characters that built something or own a bed or a tombstone in the world count as known, so switching this on does not lock out existing players. Admins are exempt.
+- `characters` on the console shows how the guard sees who is online; `allow <name>` lets a character in (and one that is waiting for its kick stay). The list is `<world>.characters.txt` next to the world save.
+
+What a character carries without wearing it stays invisible to the server: this stops characters being imported with their progress, not a known character bringing materials in its bags. Stopping that needs a mod on every client.
 
 ## Hosting notes
 

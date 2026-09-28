@@ -33,6 +33,15 @@ namespace PluginConfiguration
 		public static ConfigEntry<bool> compatVcpUnload;
 		public static ConfigEntry<bool> fixTeleportGhosts;
 
+		public static ConfigEntry<bool> characterGuardEnabled;
+		public static ConfigEntry<Valheim_Serverside.Features.CharacterGuard.NewCharacterPolicy> characterGuardNewCharacters;
+		public static ConfigEntry<Valheim_Serverside.Features.CharacterGuard.Action> characterGuardNewCharacterAction;
+		public static ConfigEntry<Valheim_Serverside.Features.CharacterGuard.Action> characterGuardChangedAway;
+		public static ConfigEntry<bool> characterGuardExemptAdmins;
+		public static ConfigEntry<string> characterGuardFreshEvent;
+		public static ConfigEntry<string> characterGuardNewMessage;
+		public static ConfigEntry<string> characterGuardChangedMessage;
+
 		public static void Load(ConfigFile config)
 		{
 			modEnabled = config.Bind<bool>("General", "Enabled", true, "Enable or disable the mod");
@@ -89,6 +98,25 @@ namespace PluginConfiguration
 				"Only matters with ValheimCommunityPatch installed. Its spawn queue replaces ZNetScene.CreateObjectsSorted and orders new objects by the server's reference position, which on a dedicated server is the world origin, so this mod's ordering by the nearest player never runs. Off: that patch of ValheimCommunityPatch is removed when the world starts. On: it is kept.");
 			compatVcpUnload = config.Bind<bool>("Compat", "ValheimCommunityPatchUnload", false,
 				"Only matters with ValheimCommunityPatch installed. Its zone-diff unload replaces ZNetScene.RemoveObjects and, whenever the object lists look untouched, drops everything outside the simulation distance of the server's reference position -- the world origin on a dedicated server. With players whose areas do not overlap, objects around them are then destroyed and created again on every pass (dungeons reloading dozens of times a second, doors, beds and items that cannot be used). Off: that patch of ValheimCommunityPatch is removed when the world starts. On: it is kept, and this mod marks its object lists as edited on every pass so that patch takes the game's own unload check.");
+			characterGuardEnabled = config.Bind<bool>("CharacterGuard", "Enabled", false,
+				"Check the characters players join with. A vanilla client keeps its character to itself, so the server cannot see or replace what a character carries; it sees what it wears and, from the raids it is ready for, how far it has come. A character this world has not seen must be fresh (NewCharacters), and a known one that comes back wearing something new or with other progress than it left with was played elsewhere (ChangedAway). Characters that built something or own a bed or tombstone here count as known. The list is kept next to the world save (<world>.characters.txt); `allow <name>` in the console lets a character in.");
+			characterGuardNewCharacters = config.Bind("CharacterGuard", "NewCharacters", Valheim_Serverside.Features.CharacterGuard.NewCharacterPolicy.RequireFresh,
+				"RequireFresh: a character this world has not seen must still be ready for Eikthyr's raid (knows nothing past the first boss) and wear nothing beyond a level 1 workbench. Allow: every new character is let in and remembered.");
+			characterGuardNewCharacterAction = config.Bind("CharacterGuard", "NewCharacterAction", Valheim_Serverside.Features.CharacterGuard.Action.Kick,
+				"What happens to a new character that is not fresh: Kick (after a message on their screen), Log, or Ignore.");
+			characterGuardChangedAway = config.Bind("CharacterGuard", "ChangedAway", Valheim_Serverside.Features.CharacterGuard.Action.Log,
+				"What happens to a known character that comes back wearing something new, or with other progress than it had when it left: Log, Kick, or Ignore.");
+			characterGuardExemptAdmins = config.Bind<bool>("CharacterGuard", "ExemptAdmins", true,
+				"Admins (adminlist.txt) are never checked.");
+			characterGuardFreshEvent = config.Bind<string>("CharacterGuard", "FreshEvent", "army_eikthyr",
+				"The raid a fresh character is still ready for. The game stops a character being ready for army_eikthyr once it knows the antler, bronze or iron pickaxe, hard antler or Eikthyr's trophy.");
+			characterGuardNewMessage = config.Bind<string>("CharacterGuard", "NewCharacterMessage",
+				"This character brings progress from another world. Please join with a new character, or ask an admin.",
+				"Shown in the middle of the screen before a new character that is not fresh is kicked.");
+			characterGuardChangedMessage = config.Bind<string>("CharacterGuard", "ChangedAwayMessage",
+				"This character was played on another world since it left here. Please ask an admin.",
+				"Shown in the middle of the screen before a changed character is kicked (ChangedAway = Kick).");
+
 			fixTeleportGhosts = config.Bind<bool>("Fixes", "TeleportGhosts", true,
 				"Tell the players near the old spot to drop a player who teleported away. Valheim 1.0 checks whether an object left their area before it stores the new position, so the teleported player stayed there for them, frozen, until they next crossed a zone line.");
 		}

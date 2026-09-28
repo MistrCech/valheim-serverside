@@ -12,8 +12,8 @@ namespace Valheim_Serverside
 		Own commands: `save`, `stop`, `players`, `give <item> <amount> <player>`, `broadcast <text>`,
 		`event <name> <player>`, `events`, `help`. Anything else is passed to the game's own console
 		(the Terminal a dedicated server has but never reads), so the vanilla server commands work
-		too: `kick`, `ban`, `unban`, `banned`, `stopevent`, `randomevent`, and after `devcommands`
-		the cheat commands that need no player: `skiptime`, `setkey`, `removekey`, `resetkeys`,
+		too: `kick`, `ban`, `unban`, `banned`, `stopevent`, `randomevent`, `setkey`, `removekey`, and
+		after `devcommands` the cheat commands that need no player: `skiptime`, `resetkeys`,
 		`listkeys`, `env`, `tod`, `wind`. The commands that act on "the player" (`spawn`, `god`,
 		`tp`, `event` without a target) cannot work on a dedicated server; `give` and
 		`event <name> <player>` are the server's versions.
@@ -29,7 +29,7 @@ namespace Valheim_Serverside
 	*/
 	public static class ServerConsole
 	{
-		private const string Commands = "save | stop | players | give <item> <amount> <player> | broadcast <text> | event <name> <player> | events | help"
+		private const string Commands = "save | stop | players | give <item> <amount> <player> | broadcast <text> | event <name> <player> | events | characters | allow <character> | help"
 			+ " -- anything else goes to the game console: kick, ban, unban, banned, stopevent, devcommands, skiptime ...";
 
 		private static readonly ConcurrentQueue<string> s_commands = new ConcurrentQueue<string>();
@@ -179,6 +179,13 @@ namespace Valheim_Serverside
 						break;
 					case "events":
 						Reply(worldLoaded ? "events: " + AdminCommands.Events() : "no world loaded");
+						break;
+					case "characters":
+						Reply(worldLoaded ? Features.CharacterGuard.Describe() : "no world loaded");
+						break;
+					case "allow":
+						// allow <character name, may contain spaces>: lets in a character the guard turned away
+						Reply(!worldLoaded ? "no world loaded" : words.Length < 2 ? "usage: allow <character>" : Features.CharacterGuard.Allow(string.Join(" ", words, 1, words.Length - 1)));
 						break;
 					case "help":
 						Reply("commands: " + Commands);

@@ -1,3 +1,28 @@
+## [1.12.0] - 2026-09-28
+
+### Added
+
+- `[CharacterGuard]` (off by default): a server-side check on the characters players join with, for
+  servers whose players keep vanilla clients. A vanilla client never sends its inventory, so the
+  server cannot read or replace it; it sees the character's id, what it wears (with weapon upgrade
+  levels), and the raids it is ready for, which the game derives from the items it knows and the
+  bosses it has beaten. A character this world has not seen must be fresh -- still ready for
+  Eikthyr's raid and wearing nothing beyond a level 1 workbench -- or it is shown a message and
+  kicked (`NewCharacterAction`: Kick, Log, Ignore). A known character that comes back wearing
+  something new or ready for other raids than when it left is logged (`ChangedAway`: Log, Kick,
+  Ignore). Characters that built something or own a bed or tombstone in the world count as known,
+  so existing players are not locked out; admins are exempt. Console: `characters`, `allow <name>`.
+  The list is kept in `<world>.characters.txt`. Tested with fake players on a copy of a live world:
+  a fresh character and one with a club and rags let in, one with iron gear and progress kicked,
+  a builder of the world let in; on their return a new sword and new raid readiness logged (or
+  kicked with `ChangedAway = Kick`), an unchanged character let in, and `allow` both cancelling a
+  pending kick and letting a kicked character in.
+
+### Fixed
+
+- The console help said `setkey` and `removekey` need `devcommands`; they do not (only `listkeys`,
+  `resetkeys` and the like are cheats).
+
 ## [1.11.1] - 2026-09-25
 
 An audit of every patch against Valheim 1.0.15 and 1.0.12, prompted by MistrCech/valheim-serverside#2.
