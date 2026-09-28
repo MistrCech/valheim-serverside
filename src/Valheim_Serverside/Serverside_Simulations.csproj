@@ -110,6 +110,7 @@
     <Compile Include="Features\Compat_ValheimCommunityPatch.cs" />
     <Compile Include="Features\DungeonLoadGuard.cs" />
     <Compile Include="Features\CharacterGuard.cs" />
+    <Compile Include="Features\ItemLedger.cs" />
     <Compile Include="Features\Core.cs" />
     <Compile Include="Utils.cs" />
     <Compile Include="Patching.cs" />

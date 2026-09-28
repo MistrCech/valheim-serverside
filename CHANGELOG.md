@@ -17,6 +17,21 @@
   a builder of the world let in; on their return a new sword and new raid readiness logged (or
   kicked with `ChangedAway = Kick`), an unchanged character let in, and `allow` both cancelling a
   pending kick and letting a kicked character in.
+- `[ItemLedger] Mode` (Off by default; LogOnly; On): an account per character of the valuable items
+  (`Items`: ores, metals, scrap, Eitr, dragon tears and eggs) it got on the server -- picked up
+  (a DestroyZDO from that player), taken out of a container -- and put back into the world --
+  dropped, put into a container or smelter, built with, died carrying. More out than ever in (and
+  than it could make: bronze from copper and tin, smallest recipe first) came from another world:
+  written to `<world>.guard.log`, and with On taken away (a dropped stack cut down, a container
+  emptied of it once closed, a smelter refusing it). Only exact accounts are acted on: a new, fresh
+  character from zero, any other after its first death here, when the tombstone shows the whole
+  bag; until then findings are "unverified". Traders' goods are not tracked. Accounts in
+  `<world>.items.txt`. Tested with simulated clients on a copy of a live world: black metal put
+  into a chest, bronze dropped beyond what copper and tin could make (one bar allowed), iron scrap
+  fed to a smelter -- logged, and with On taken out of the chest, the stack cut from 3 to 1, the
+  smelter refusing it; an older character's silver only noted as unverified until its death, then
+  2 silver beyond what it took back taken away; a forge built from copper it never got only logged.
+- The character guard and the item ledger write their own log, `<world>.guard.log`.
 
 ### Fixed
 

@@ -77,6 +77,7 @@ namespace Valheim_Serverside
 			availableFeatures.AddFeature(new Features.Compat_ValheimCommunityPatch());
 			availableFeatures.AddFeature(new Features.DungeonLoadGuard());
 			availableFeatures.AddFeature(new Features.CharacterGuard());
+			availableFeatures.AddFeature(new Features.ItemLedger());
 
 			PatchRequirements patchRequirements = new PatchRequirements();
 			patchRequirements.AddRequirement(new PatchRequirement.DebugBuild());
@@ -104,6 +105,7 @@ namespace Valheim_Serverside
 			{
 				Features.PerformanceStats.Frame();
 				Features.CharacterGuard.Tick();
+				Features.ItemLedger.Tick();
 			}
 		}
 

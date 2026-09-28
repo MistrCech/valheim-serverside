@@ -98,15 +98,9 @@ namespace Valheim_Serverside.Features
 			{ ZDOVars.s_rightBackItem, ZDOVars.s_rightBackItemQuality }, { ZDOVars.s_leftBackItem, ZDOVars.s_leftBackItemQuality },
 		};
 
-		// Called from ServersidePlugin.Update while the mod is installed.
-		public static void Tick()
+		// The item ledger needs the world's footprint and the known list even with the guard itself off.
+		public static void EnsureFootprint()
 		{
-			if (!Configuration.characterGuardEnabled.Value || !ZNet.instance || !ZNet.instance.IsServer() || ZNet.World == null
-				|| ZDOMan.instance == null || !ObjectDB.instance || !RandEventSystem.instance || Time.time < s_nextTick)
-			{
-				return;
-			}
-			s_nextTick = Time.time + 1f;
 			if (s_path == null)
 			{
 				Load();
@@ -116,6 +110,39 @@ namespace Valheim_Serverside.Features
 				s_footprintStarted = true;
 				ServersidePlugin.instance.StartCoroutine(CollectFootprint());
 			}
+		}
+
+		/*
+			A character the world has not seen before and that is fresh: no builds, bed or tombstone here,
+			not on the known list, still ready for Eikthyr's raid and wearing nothing advanced. What it
+			carries then counts as nothing worth tracking. Anything unknown (the footprint still being
+			collected, no raid list from the client yet) answers no.
+		*/
+		public static bool IsBrandNew(ZNetPeer peer, ZDO character, long id)
+		{
+			if (s_footprint == null || s_footprint.Contains(id) || (s_records.TryGetValue(id, out Record known) && known.reason != "new and fresh")
+				|| !peer.m_serverSyncedPlayerData.TryGetValue(RandEventSystem.PossibleEventsKey, out string events))
+			{
+				return false;
+			}
+			if (known != null && (DateTime.UtcNow - known.firstSeen).TotalMinutes > 10)
+			{
+				// Fresh when it was first seen, but it has been played here since: its bag is not empty any more.
+				return false;
+			}
+			return FreshnessProblems(Wearing(character), events, true).Count == 0;
+		}
+
+		// Called from ServersidePlugin.Update while the mod is installed.
+		public static void Tick()
+		{
+			if (!Configuration.characterGuardEnabled.Value || !ZNet.instance || !ZNet.instance.IsServer() || ZNet.World == null
+				|| ZDOMan.instance == null || !ObjectDB.instance || !RandEventSystem.instance || Time.time < s_nextTick)
+			{
+				return;
+			}
+			s_nextTick = Time.time + 1f;
+			EnsureFootprint();
 			foreach (ZNetPeer peer in ZNet.instance.GetPeers())
 			{
 				if (!peer.IsReady())
@@ -232,6 +259,7 @@ namespace Valheim_Serverside.Features
 			{
 				return;
 			}
+			GuardLog.Write(what + (action == Action.Kick ? ": kicked" : ""));
 			if (action == Action.Log)
 			{
 				ServersidePlugin.logger.LogWarning("Character guard: " + what);
@@ -249,6 +277,7 @@ namespace Valheim_Serverside.Features
 			{
 				s_records[id] = record = new Record { id = id, firstSeen = now, reason = reason };
 				ServersidePlugin.logger.LogInfo($"Character guard: {name} ({account}) is now known: {reason}");
+				GuardLog.Write($"{name} ({account}, character {id}) is now known: {reason}");
 			}
 			record.name = name;
 			record.account = account;

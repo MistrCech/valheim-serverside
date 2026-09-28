@@ -42,6 +42,11 @@ namespace PluginConfiguration
 		public static ConfigEntry<string> characterGuardNewMessage;
 		public static ConfigEntry<string> characterGuardChangedMessage;
 
+		public static ConfigEntry<Valheim_Serverside.Features.ItemLedger.Mode> itemLedgerMode;
+		public static ConfigEntry<string> itemLedgerItems;
+		public static ConfigEntry<bool> itemLedgerLogAll;
+		public static ConfigEntry<string> itemLedgerMessage;
+
 		public static void Load(ConfigFile config)
 		{
 			modEnabled = config.Bind<bool>("General", "Enabled", true, "Enable or disable the mod");
@@ -116,6 +121,16 @@ namespace PluginConfiguration
 			characterGuardChangedMessage = config.Bind<string>("CharacterGuard", "ChangedAwayMessage",
 				"This character was played on another world since it left here. Please ask an admin.",
 				"Shown in the middle of the screen before a changed character is kicked (ChangedAway = Kick).");
+
+			itemLedgerMode = config.Bind("ItemLedger", "Mode", Valheim_Serverside.Features.ItemLedger.Mode.Off,
+				"Off, LogOnly or On. Keep an account per character of the valuable items (Items) it got on this server -- picked up, taken out of containers -- and the ones it put back into the world -- dropped, put into containers or smelters, built with, died carrying. Putting in more than it ever got here (or could make from it) means it came from another world: that is written to <world>.guard.log next to the world save, and with On taken away (a dropped stack is cut down, a container loses it once nobody has it open, a smelter refuses it). Only characters whose account is exact are acted on: a new, fresh character from the start, any other after its first death here, when the tombstone shows its whole bag.");
+			itemLedgerItems = config.Bind<string>("ItemLedger", "Items",
+				"CopperOre,Copper,CopperScrap,TinOre,Tin,Bronze,IronScrap,IronOre,Iron,SilverOre,Silver,BlackMetalScrap,BlackMetal,FlametalOre,Flametal,FlametalOreNew,FlametalNew,Eitr,DragonTear,DragonEgg",
+				"Item prefab names to keep accounts of, comma separated. Items traders sell are left out automatically.");
+			itemLedgerLogAll = config.Bind<bool>("ItemLedger", "LogAllMovements", false,
+				"Also write every movement of a tracked item to the guard log, not only what cannot be accounted for.");
+			itemLedgerMessage = config.Bind<string>("ItemLedger", "Message", "{0} x {1} did not come from this world and was taken away.",
+				"Shown in the middle of the player's screen when items are taken away (Mode = On). {0} is the amount, {1} the item.");
 
 			fixTeleportGhosts = config.Bind<bool>("Fixes", "TeleportGhosts", true,
 				"Tell the players near the old spot to drop a player who teleported away. Valheim 1.0 checks whether an object left their area before it stores the new position, so the teleported player stayed there for them, frozen, until they next crossed a zone line.");

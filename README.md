@@ -47,6 +47,7 @@ Compared to Serverside Simulations 1.1.9 (details in the [changelog](CHANGELOG.m
 - **Smoother server frames:** world updates reach every player at a steady interval however many are online, one slow frame no longer makes the next one slow through physics catch-up, and new zones are generated one per tick instead of one per exploring player. A periodic log shows frame times and what they are spent on.
 - **`save` and `stop` console commands** for server panels that write to standard input.
 - **Character guard** (off by default): a check on the characters players join with, server-side only, so clients stay vanilla. A character this world has not seen must be fresh, and a known one that comes back changed was played elsewhere -- see below.
+- **Item ledger** (off by default): an account per character of the valuable items it got here and put back into the world; items that came from another world are logged, or taken away -- see below.
 - **Safety:** a startup check warns when a vanilla method the mod replaces has changed in a game update; if the core patches cannot be applied, the mod removes itself and the server runs vanilla.
 
 ## Installation
@@ -91,6 +92,9 @@ Clients need nothing.
 | `[CharacterGuard] ChangedAway` | Log | For a known character that comes back wearing something new or with other progress: `Log`, `Kick` or `Ignore`. |
 | `[CharacterGuard] ExemptAdmins` | true | Admins are never checked. |
 | `[CharacterGuard] NewCharacterMessage` / `ChangedAwayMessage` | (English text) | Shown in the middle of the player's screen before the kick. |
+| `[ItemLedger] Mode` | Off | `Off`, `LogOnly` or `On`: keep item accounts per character (see Item ledger below); `On` also takes away items that came from another world. |
+| `[ItemLedger] Items` | ores, metals, scrap, Eitr, DragonTear, DragonEgg | Item prefab names to keep accounts of. Items traders sell are left out automatically. |
+| `[ItemLedger] LogAllMovements` | false | Also log every movement of a tracked item, not only what cannot be accounted for. |
 | `[Performance] StatsIntervalMinutes` | 5 | How often to log FPS, frame times, physics steps per frame, the cost of world updates and zone generation, and what the slowest frame was doing, while players are online. 0 disables. |
 
 ## Character guard
@@ -102,7 +106,19 @@ Valheim keeps a character on the player's own computer and a vanilla client neve
 - Characters that built something or own a bed or a tombstone in the world count as known, so switching this on does not lock out existing players. Admins are exempt.
 - `characters` on the console shows how the guard sees who is online; `allow <name>` lets a character in (and one that is waiting for its kick stay). The list is `<world>.characters.txt` next to the world save.
 
-What a character carries without wearing it stays invisible to the server: this stops characters being imported with their progress, not a known character bringing materials in its bags. Stopping that needs a mod on every client.
+What a character carries without wearing it stays invisible to the server: this stops characters being imported with their progress; the item ledger below catches materials brought in by known characters once they reach the world.
+
+## Item ledger
+
+The server never sees a bag, but nearly every way into and out of one passes through an object it does see. In: picking an item up off the ground (the player takes the item over and deletes it), taking it out of a chest, cart, ship or tombstone. Out: dropping it, putting it into a container or a smelter, kiln or refinery, building with it, dying with it (the tombstone is the whole bag). Crafting is not seen, but a tracked item made from tracked items (bronze from copper and tin) is counted as made from what the character had; what traders sell is not tracked.
+
+So the server keeps an account per character of the tracked items (`Items`: ores, metals, scrap and a few boss drops). When a character puts more of an item into the world than it ever got here, and could have made, the rest came from somewhere else. That is written to `<world>.guard.log` next to the world save; with `Mode = On` it is also taken away: a dropped stack is cut down, a container loses it once nobody has it open, a smelter refuses it (the client has already taken it out of the bag), and the player sees a message. Pieces built with it are only logged.
+
+- A new, fresh character (see Character guard) starts at zero, so its account is exact from the start.
+- For a character that existed before, what it carried when counting began is unknown. Its findings are logged as unverified and never acted on, until its first death here: the tombstone shows the whole bag, and from then on its account is exact.
+- The accounts are kept in `<world>.items.txt`.
+
+Start with `LogOnly` for a while and read the guard log before switching to `On`.
 
 ## Hosting notes
 
