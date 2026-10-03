@@ -106,7 +106,7 @@ Clients need nothing.
 Valheim keeps a character on the player's own computer and a vanilla client never sends its inventory to the server, so no server-side mod can read or replace what a character carries. The server does see a character's id (the same on every world), what it wears and holds (both hands, back slots, armour, utility, trinket, with the upgrade level of weapons), and the raids it is ready for, which the game works out from the items the character knows and the bosses it has beaten. The guard uses that:
 
 - **New characters** -- not in this world's list and without anything built, a bed or a tombstone here -- must be fresh: still ready for Eikthyr's raid (the game stops that once a character knows the antler, bronze or iron pickaxe, hard antler or Eikthyr's trophy) and wearing nothing beyond what a level 1 workbench makes. A character brought in with progress from another world gets a message and is kicked 8 seconds later (`NewCharacterAction`).
-- **Known characters** that come back wearing something they did not have when they left, or ready for other raids than then, were played somewhere else in between; that is logged (`ChangedAway`, or kicked).
+- **Known characters** that come back wearing something they did not have when last seen here, or ready for other raids than then, were played somewhere else in between; that is logged (`ChangedAway`, or kicked). What an online character wears and knows is noted every minute as well as when it leaves, since a server shutdown does not disconnect the players one by one.
 - Characters that built something or own a bed or a tombstone in the world count as known, so switching this on does not lock out existing players. Admins are exempt.
 - `characters` on the console shows how the guard sees who is online; `allow <name>` lets a character in (and one that is waiting for its kick stay). The list is `<world>.characters.txt` next to the world save.
 
@@ -130,6 +130,7 @@ When a character puts more of an item into the world than it ever got here, and 
 - For any other character, what it carried when counting began is unknown. Its findings are logged as unverified and never acted on, until its first death here: the tombstone shows the whole bag, and from then on its account is exact.
 - For the first `GraceHours` after the ledger first runs on a world, no character counts as new.
 - The accounts are kept in `<world>.items.txt`.
+- A fault in the ledger or the guard is logged (at most 20 times in a quarter of an hour) and never stops the game's own code. If the accounts or the known characters cannot be read, that feature stays off until the next start and leaves the file as it is.
 
 Start with `LogOnly` for a while and read the guard log before switching to `On`.
 

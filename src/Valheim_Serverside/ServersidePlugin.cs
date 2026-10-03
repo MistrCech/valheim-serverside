@@ -104,8 +104,32 @@ namespace Valheim_Serverside
 			if (installed)
 			{
 				Features.PerformanceStats.Frame();
-				Features.CharacterGuard.Tick();
-				Features.ItemLedger.Tick();
+				Safely(Features.CharacterGuard.Tick, "Character guard");
+				Safely(Features.ItemLedger.Tick, "Item ledger");
+			}
+		}
+
+		// One feature's fault must not stop the other's tick, nor fill the log every frame.
+		private int tickErrors;
+		private float tickErrorsSince;
+
+		private void Safely(System.Action tick, string feature)
+		{
+			try
+			{
+				tick();
+			}
+			catch (Exception e)
+			{
+				if (Time.realtimeSinceStartup - tickErrorsSince > 900f)
+				{
+					tickErrorsSince = Time.realtimeSinceStartup;
+					tickErrors = 0;
+				}
+				if (tickErrors++ < 20)
+				{
+					Logger.LogWarning($"{feature}: {e}");
+				}
 			}
 		}
 

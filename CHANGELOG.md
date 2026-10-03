@@ -33,7 +33,15 @@ patches; 1.11.1 passes the patch, transpiler and raid checks on it, and so does 
   uses it, a smelter's queue undone, a boss altar refusing -- and the player told (`Message`,
   `AltarMessage`). Only exact accounts are acted on: a new, fresh character from zero, any other
   after its first death here, when the tombstone shows the whole bag; for the first `GraceHours`
-  (168) no character counts as new. Admins are exempt. Accounts in `<world>.items.txt`.
+  (168) no character counts as new. Admins are exempt. Accounts in `<world>.items.txt`. Findings
+  for an account that is not exact yet go to the guard log only, not to the BepInEx log.
+- Both features keep out of the game's way: every patch catches its own faults and logs them (at
+  most 20 in a quarter of an hour), so a fault never stops the original method -- a disconnect, a
+  boss summon, object data from a player. If the accounts or the known characters cannot be read,
+  that feature stays off until the next start and leaves the file as it is; a save cut short is
+  read back from its `.tmp`. Container contents are read without creating the items, as
+  `Inventory.Load` would for every stack. The guard notes what an online character wears and knows
+  every minute, since a server shutdown does not disconnect the players one by one.
 - `[ItemLedger] Items = auto`: the items that lock progress, from the game's own data -- what cannot
   go through a portal, what bosses drop and what summons them, every material that all recipes and
   pieces using it need more than a level 1 workbench for, every item that all its recipes need more

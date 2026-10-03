@@ -81,10 +81,18 @@ namespace Valheim_Serverside.Features
 		private static Dictionary<int, bool> s_advanced;
 		private static HashSet<string> s_progressEvents;
 		private static float s_nextTick;
+		private static float s_nextSnapshot;
+		// The known list could not be read: the guard stays off until the server restarts, and the file is left alone.
+		private static bool s_failed;
+		private static int s_warnings;
+		private static float s_warningsSince;
 
 		private const float SettleSeconds = 3f;
 		private const float EventsWaitSeconds = 20f;
 		private const float KickDelaySeconds = 8f;
+		// How often what an online character wears and knows is taken as the reference for its return: a server
+		// shutdown never calls ZNet.Disconnect, so the leave itself is not always seen.
+		private const float SnapshotSeconds = 60f;
 
 		private static readonly int[] Worn =
 		{
@@ -101,9 +109,23 @@ namespace Valheim_Serverside.Features
 		// The item ledger needs the world's footprint and the known list even with the guard itself off.
 		public static void EnsureFootprint()
 		{
+			if (s_failed)
+			{
+				return;
+			}
 			if (s_path == null)
 			{
-				Load();
+				try
+				{
+					Load();
+				}
+				catch (Exception e)
+				{
+					s_failed = true;
+					ServersidePlugin.logger.LogError($"Character guard: could not read the known characters, so it stays off until the server restarts: {e}");
+					GuardLog.Write($"Character guard: could not read the known characters ({e.GetType().Name}: {e.Message}), so it stays off until the server restarts");
+					return;
+				}
 			}
 			if (!s_footprintStarted)
 			{
@@ -120,7 +142,7 @@ namespace Valheim_Serverside.Features
 		*/
 		public static bool IsBrandNew(ZNetPeer peer, ZDO character, long id)
 		{
-			if (s_footprint == null || s_footprint.Contains(id) || (s_records.TryGetValue(id, out Record known) && known.reason != "new and fresh")
+			if (s_failed || s_footprint == null || s_footprint.Contains(id) || (s_records.TryGetValue(id, out Record known) && known.reason != "new and fresh")
 				|| !peer.m_serverSyncedPlayerData.TryGetValue(RandEventSystem.PossibleEventsKey, out string events))
 			{
 				return false;
@@ -143,31 +165,99 @@ namespace Valheim_Serverside.Features
 			}
 			s_nextTick = Time.time + 1f;
 			EnsureFootprint();
-			foreach (ZNetPeer peer in ZNet.instance.GetPeers())
+			if (s_failed)
 			{
-				if (!peer.IsReady())
+				return;
+			}
+			foreach (ZNetPeer peer in ZNet.instance.GetPeers().ToList())
+			{
+				try
 				{
-					continue;
+					if (!peer.IsReady())
+					{
+						continue;
+					}
+					if (!s_sessions.TryGetValue(peer, out Session session))
+					{
+						s_sessions[peer] = session = new Session { since = Time.time };
+					}
+					if (session.kickAt >= 0f && Time.time >= session.kickAt)
+					{
+						session.kickAt = -1f;
+						session.kicked = true;
+						ServersidePlugin.logger.LogInfo($"Character guard: kicking {peer.m_playerName}");
+						ZNet.instance.InternalKick(peer);
+					}
+					if (!session.decided && s_footprint != null)
+					{
+						TryDecide(peer, session);
+					}
 				}
-				if (!s_sessions.TryGetValue(peer, out Session session))
+				catch (Exception e)
 				{
-					s_sessions[peer] = session = new Session { since = Time.time };
-				}
-				if (session.kickAt >= 0f && Time.time >= session.kickAt)
-				{
-					session.kickAt = -1f;
-					session.kicked = true;
-					ServersidePlugin.logger.LogInfo($"Character guard: kicking {peer.m_playerName}");
-					ZNet.instance.InternalKick(peer);
-				}
-				if (!session.decided && s_footprint != null)
-				{
-					TryDecide(peer, session);
+					Warn($"could not check {peer.m_playerName}", e);
 				}
 			}
 			foreach (ZNetPeer gone in s_sessions.Keys.Where(p => !ZNet.instance.GetPeers().Contains(p)).ToList())
 			{
 				s_sessions.Remove(gone);
+			}
+			if (Time.time >= s_nextSnapshot)
+			{
+				s_nextSnapshot = Time.time + SnapshotSeconds;
+				bool changed = false;
+				foreach (KeyValuePair<ZNetPeer, Session> kv in s_sessions)
+				{
+					try
+					{
+						changed |= Snapshot(kv.Key, kv.Value);
+					}
+					catch (Exception e)
+					{
+						Warn($"could not note what {kv.Key.m_playerName} wears", e);
+					}
+				}
+				if (changed)
+				{
+					Save();
+				}
+			}
+		}
+
+		// What the character wears and knows now, as the reference for its return. True if that changed.
+		private static bool Snapshot(ZNetPeer peer, Session session)
+		{
+			if (!session.decided || session.kicked || session.kickAt >= 0f || !s_records.TryGetValue(session.id, out Record record))
+			{
+				return false;
+			}
+			ZDO character = peer.m_characterID.IsNone() ? null : ZDOMan.instance.GetZDO(peer.m_characterID);
+			if (character == null || character.GetLong(ZDOVars.s_playerID, 0L) != session.id)
+			{
+				return false;
+			}
+			string[] wearing = Wearing(character);
+			string[] progress = peer.m_serverSyncedPlayerData.TryGetValue(RandEventSystem.PossibleEventsKey, out string events) ? Progress(events) : record.progress;
+			bool changed = record.wearing == null || !record.wearing.SequenceEqual(wearing)
+				|| (progress != null && (record.progress == null || !record.progress.SequenceEqual(progress)));
+			record.wearing = wearing;
+			record.progress = progress;
+			record.lastSeen = DateTime.UtcNow;
+			return changed;
+		}
+
+		// At most 20 in a quarter of an hour, so a fault that repeats stays visible without flooding the log.
+		private static void Warn(string what, Exception e)
+		{
+			float now = Time.realtimeSinceStartup;
+			if (now - s_warningsSince > 900f)
+			{
+				s_warningsSince = now;
+				s_warnings = 0;
+			}
+			if (s_warnings++ < 20)
+			{
+				ServersidePlugin.logger.LogWarning($"Character guard: {what}: {e}");
 			}
 		}
 
@@ -381,7 +471,7 @@ namespace Valheim_Serverside.Features
 		{
 			if (s_advanced == null)
 			{
-				s_advanced = new Dictionary<int, bool>();
+				Dictionary<int, bool> table = new Dictionary<int, bool>();
 				foreach (Recipe recipe in ObjectDB.instance.m_recipes)
 				{
 					if (recipe == null || !recipe.m_item || !recipe.m_enabled)
@@ -391,8 +481,9 @@ namespace Valheim_Serverside.Features
 					int hash = recipe.m_item.gameObject.name.GetStableHashCode();
 					bool advanced = recipe.m_craftingStation
 						&& (global::Utils.GetPrefabName(recipe.m_craftingStation.gameObject) != "piece_workbench" || recipe.m_minStationLevel > 1);
-					s_advanced[hash] = s_advanced.TryGetValue(hash, out bool before) ? before && advanced : advanced;
+					table[hash] = table.TryGetValue(hash, out bool before) ? before && advanced : advanced;
 				}
+				s_advanced = table;
 			}
 			string name = worn.Split('@')[0];
 			if (worn.Contains("@"))
@@ -442,11 +533,16 @@ namespace Valheim_Serverside.Features
 			World world = ZNet.World;
 			s_path = Path.Combine(SaveSystem.GetWorldsSaveRootPath(world.m_fileSource), world.m_name + ".characters.txt");
 			s_records.Clear();
-			if (!File.Exists(s_path))
+			string read = File.Exists(s_path) ? s_path : File.Exists(s_path + ".tmp") ? s_path + ".tmp" : null;
+			if (read == null)
 			{
 				return;
 			}
-			foreach (string line in File.ReadAllLines(s_path))
+			if (read != s_path)
+			{
+				ServersidePlugin.logger.LogWarning($"Character guard: {Path.GetFileName(s_path)} is missing; reading {Path.GetFileName(read)}, left by a save that was cut short");
+			}
+			foreach (string line in File.ReadAllLines(read))
 			{
 				if (line.StartsWith("#", StringComparison.Ordinal))
 				{
@@ -473,10 +569,22 @@ namespace Valheim_Serverside.Features
 
 		private static void Save()
 		{
-			if (s_path == null)
+			if (s_path == null || s_failed)
 			{
 				return;
 			}
+			try
+			{
+				Write();
+			}
+			catch (Exception e)
+			{
+				ServersidePlugin.logger.LogWarning($"Character guard: could not save {s_path}: {e.Message}");
+			}
+		}
+
+		private static void Write()
+		{
 			List<string> lines = new List<string>
 			{
 				"# Sarkastic.eu Dedicated Simulation: characters known on this world (character guard). Tab separated:",
@@ -490,20 +598,13 @@ namespace Valheim_Serverside.Features
 					r.wearing == null ? "-" : string.Join(" ", r.wearing), r.progress == null ? "-" : string.Join(",", r.progress),
 				}));
 			}
-			try
+			string temp = s_path + ".tmp";
+			File.WriteAllLines(temp, lines);
+			if (File.Exists(s_path))
 			{
-				string temp = s_path + ".tmp";
-				File.WriteAllLines(temp, lines);
-				if (File.Exists(s_path))
-				{
-					File.Delete(s_path);
-				}
-				File.Move(temp, s_path);
+				File.Delete(s_path);
 			}
-			catch (Exception e)
-			{
-				ServersidePlugin.logger.LogWarning($"Character guard: could not save {s_path}: {e.Message}");
-			}
+			File.Move(temp, s_path);
 		}
 
 		private static string Clean(string s)
@@ -588,23 +689,23 @@ namespace Valheim_Serverside.Features
 			// What the character wears and knows as it leaves; a different state on its return means it was played elsewhere.
 			static void Prefix(ZNetPeer peer)
 			{
-				if (!ZNet.instance || !ZNet.instance.IsServer() || !s_sessions.TryGetValue(peer, out Session session) || !session.decided
-					|| session.kicked || session.kickAt >= 0f || !s_records.TryGetValue(session.id, out Record record))
+				try
 				{
-					return;
+					if (!ZNet.instance || !ZNet.instance.IsServer() || ZDOMan.instance == null || !ObjectDB.instance || !RandEventSystem.instance
+						|| peer == null || !s_sessions.TryGetValue(peer, out Session session))
+					{
+						return;
+					}
+					if (session.decided && !session.kicked && s_records.ContainsKey(session.id))
+					{
+						Snapshot(peer, session);
+						Save();
+					}
 				}
-				ZDO character = peer.m_characterID.IsNone() ? null : ZDOMan.instance.GetZDO(peer.m_characterID);
-				if (character == null || character.GetLong(ZDOVars.s_playerID, 0L) != session.id)
+				catch (Exception e)
 				{
-					return;
+					Warn($"could not note what {peer?.m_playerName} wore when leaving", e);
 				}
-				record.wearing = Wearing(character);
-				if (peer.m_serverSyncedPlayerData.TryGetValue(RandEventSystem.PossibleEventsKey, out string events))
-				{
-					record.progress = Progress(events);
-				}
-				record.lastSeen = DateTime.UtcNow;
-				Save();
 			}
 		}
 	}

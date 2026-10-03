@@ -190,6 +190,9 @@ namespace Valheim_Serverside.Features
 		private static readonly Dictionary<string, List<string>> s_salvage = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 		private static int s_tombstone;
 		private static int s_warnings;
+		private static float s_warningsSince;
+		// Setup or the accounts file failed: the ledger stays off until the server restarts, and the file is left alone.
+		private static bool s_failed;
 		private static bool s_quiet;
 
 		// The item stand keeps its item in "item"/"itemData", the armor stand slot i in "<i>_item"/"<i>_itemData".
@@ -232,13 +235,30 @@ namespace Valheim_Serverside.Features
 			}
 			if (!s_ready)
 			{
-				Setup();
+				if (s_failed)
+				{
+					return;
+				}
+				try
+				{
+					Setup();
+				}
+				catch (Exception e)
+				{
+					s_failed = true;
+					ServersidePlugin.logger.LogError($"Item ledger: could not start, so it stays off until the server restarts: {e}");
+					GuardLog.Write($"Item ledger: could not start ({e.GetType().Name}: {e.Message}), so it stays off until the server restarts");
+					return;
+				}
 			}
 			CharacterGuard.EnsureFootprint();
 			float now = Time.time;
-			foreach (PendingDrop drop in s_pendingDrops.Values.Where(d => now - d.since >= DropWait).ToList())
+			if (s_pendingDrops.Count > 0)
 			{
-				Guard(() => ProcessDrop(drop, ZDOMan.instance.GetZDO(drop.uid), beingPickedUp: false));
+				foreach (PendingDrop drop in s_pendingDrops.Values.Where(d => now - d.since >= DropWait).ToList())
+				{
+					Guard(() => ProcessDrop(drop, ZDOMan.instance.GetZDO(drop.uid), beingPickedUp: false));
+				}
 			}
 			for (int i = s_confiscations.Count - 1; i >= 0; i--)
 			{
@@ -269,16 +289,27 @@ namespace Valheim_Serverside.Features
 			}
 			catch (Exception e)
 			{
-				if (s_warnings++ < 20)
-				{
-					ServersidePlugin.logger.LogWarning($"Item ledger: {e}");
-				}
+				Warn(e);
+			}
+		}
+
+		// At most 20 in a quarter of an hour: a fault that repeats stays visible without flooding the log.
+		private static void Warn(Exception e)
+		{
+			float now = Time.realtimeSinceStartup;
+			if (now - s_warningsSince > 900f)
+			{
+				s_warningsSince = now;
+				s_warnings = 0;
+			}
+			if (s_warnings++ < 20)
+			{
+				ServersidePlugin.logger.LogWarning($"Item ledger: {e}");
 			}
 		}
 
 		private static void Setup()
 		{
-			s_ready = true;
 			List<string> unknown = new List<string>();
 			string spec = Configuration.itemLedgerItems.Value.Trim();
 			Dictionary<string, string> why = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -478,6 +509,7 @@ namespace Valheim_Serverside.Features
 			{
 				GuardLog.Write($"Item ledger: tracked, {group.Key} ({group.Count()}): {string.Join(", ", group.OrderBy(n => n))}");
 			}
+			s_ready = true;
 		}
 
 		private static IEnumerable<string> SplitNames(string list)
@@ -844,13 +876,20 @@ namespace Valheim_Serverside.Features
 		{
 			Dictionary<string, int> before = new Dictionary<string, int>(account.balance, StringComparer.Ordinal);
 			bool quiet = s_quiet;
+			bool can;
 			s_quiet = true;
-			bool can = needs.All(need => Ensure(account, need.Key, need.Value, depth));
-			s_quiet = quiet;
-			account.balance.Clear();
-			foreach (KeyValuePair<string, int> kv in before)
+			try
 			{
-				account.balance[kv.Key] = kv.Value;
+				can = needs.All(need => Ensure(account, need.Key, need.Value, depth));
+			}
+			finally
+			{
+				s_quiet = quiet;
+				account.balance.Clear();
+				foreach (KeyValuePair<string, int> kv in before)
+				{
+					account.balance[kv.Key] = kv.Value;
+				}
 			}
 			if (!can)
 			{
@@ -945,7 +984,11 @@ namespace Valheim_Serverside.Features
 				+ (account.exact ? "" : " (unverified: what it carried before counting began is unknown)")
 				+ (act ? ": taken away" : "");
 			GuardLog.Write(what);
-			ServersidePlugin.logger.LogWarning("Item ledger: " + what);
+			// Unverified findings are expected for every character that played before counting began: guard log only.
+			if (account.exact)
+			{
+				ServersidePlugin.logger.LogWarning("Item ledger: " + what);
+			}
 			if (act && peerUid != 0L)
 			{
 				ZRoutedRpc.instance.InvokeRoutedRPC(peerUid, "ShowMessage", (int)MessageHud.MessageType.Center,
@@ -981,17 +1024,36 @@ namespace Valheim_Serverside.Features
 		}
 
 		// Tracked items in a saved inventory (Inventory.Save).
-		private static List<Held> Contents(byte[] data, int prefab)
+		/*
+			Read the way Inventory.Load reads it, without its cost: Inventory.AddItem creates every item's
+			prefab to fill it in. The 1.0 format is read item by item (ItemDrop.ItemData.Load), an older
+			one through a temporary inventory, which keeps plain item data.
+		*/
+		private static List<Held> Contents(byte[] data)
 		{
 			List<Held> items = new List<Held>();
 			if (data == null || data.Length == 0)
 			{
 				return items;
 			}
-			Vector2i size = s_containers.TryGetValue(prefab, out Vector2i s) ? s : new Vector2i(8, 8);
-			Inventory inventory = new Inventory("ledger", null, size.x, size.y);
-			inventory.Load(new ZPackage(data));
-			foreach (ItemDrop.ItemData item in inventory.GetAllItems())
+			ZPackage package = new ZPackage(data);
+			Version.Item version = (Version.Item)package.ReadInt();
+			if (version >= Version.Item.Smaller)
+			{
+				int count = package.ReadUShort();
+				for (int i = 0; i < count; i++)
+				{
+					(int hash, ItemDrop.ItemData item) = ItemDrop.ItemData.Load(package, version);
+					if (s_tracked.TryGetValue(hash, out string name))
+					{
+						items.Add(new Held { item = name, quality = Mathf.Max(1, item.m_quality), count = item.m_stack, pickedUp = item.m_pickedUp });
+					}
+				}
+				return items;
+			}
+			Inventory old = new Inventory(true);
+			old.Load(new ZPackage(data));
+			foreach (ItemDrop.ItemData item in old.GetAllItems())
 			{
 				string name = item.m_dropPrefab ? item.m_dropPrefab.name : null;
 				if (name != null && s_tracked.ContainsKey(name.GetStableHashCode()))
@@ -1000,6 +1062,27 @@ namespace Valheim_Serverside.Features
 				}
 			}
 			return items;
+		}
+
+		// A ship or cart sends its unchanged cargo with every move: compared without LINQ.
+		private static bool Same(byte[] a, byte[] b)
+		{
+			if (ReferenceEquals(a, b))
+			{
+				return true;
+			}
+			if (a.Length != b.Length)
+			{
+				return false;
+			}
+			for (int i = 0; i < a.Length; i++)
+			{
+				if (a[i] != b[i])
+				{
+					return false;
+				}
+			}
+			return true;
 		}
 
 		private static Dictionary<(string, int), int> Totals(IEnumerable<Held> stacks)
@@ -1217,7 +1300,7 @@ namespace Valheim_Serverside.Features
 			{
 				return;
 			}
-			List<Held> bag = Contents(tombstone.GetByteArray(ZDOVars.s_items), tombstone.GetPrefab());
+			List<Held> bag = Contents(tombstone.GetByteArray(ZDOVars.s_items));
 			if (account.exact)
 			{
 				foreach (KeyValuePair<(string, int), int> stack in Totals(bag))
@@ -1245,12 +1328,12 @@ namespace Valheim_Serverside.Features
 		private static void ContainerChanged(ZDO zdo, int prefab, long owner, byte[] before)
 		{
 			byte[] after = zdo.GetByteArray(ZDOVars.s_items) ?? new byte[0];
-			if (before.SequenceEqual(after))
+			if (Same(before, after))
 			{
 				return;
 			}
-			Dictionary<(string, int), int> was = Totals(Contents(before, prefab));
-			Dictionary<(string, int), int> now = Totals(Contents(after, prefab));
+			Dictionary<(string, int), int> was = Totals(Contents(before));
+			Dictionary<(string, int), int> now = Totals(Contents(after));
 			Account account = null;
 			foreach ((string, int) key in was.Keys.Union(now.Keys).ToList())
 			{
@@ -1408,7 +1491,7 @@ namespace Valheim_Serverside.Features
 			}
 			if (s_dumpingContainers.Contains(prefab))
 			{
-				foreach (Held stack in Contents(zdo.GetByteArray(ZDOVars.s_items), prefab).Where(s => s.pickedUp))
+				foreach (Held stack in Contents(zdo.GetByteArray(ZDOVars.s_items)).Where(s => s.pickedUp))
 				{
 					Expect(sender, stack.item, stack.count);
 				}
@@ -1536,12 +1619,17 @@ namespace Valheim_Serverside.Features
 			World world = ZNet.World;
 			s_path = Path.Combine(SaveSystem.GetWorldsSaveRootPath(world.m_fileSource), world.m_name + ".items.txt");
 			s_started = DateTime.UtcNow;
-			if (!File.Exists(s_path))
+			string read = File.Exists(s_path) ? s_path : File.Exists(s_path + ".tmp") ? s_path + ".tmp" : null;
+			if (read == null)
 			{
 				MarkDirty();
 				return;
 			}
-			foreach (string line in File.ReadAllLines(s_path))
+			if (read != s_path)
+			{
+				ServersidePlugin.logger.LogWarning($"Item ledger: {Path.GetFileName(s_path)} is missing; reading {Path.GetFileName(read)}, left by a save that was cut short");
+			}
+			foreach (string line in File.ReadAllLines(read))
 			{
 				string[] f = line.Split('\t');
 				if (f[0] == "started" && f.Length > 1)
@@ -1579,11 +1667,23 @@ namespace Valheim_Serverside.Features
 
 		public static void Save()
 		{
-			if (s_path == null)
+			if (s_path == null || !s_ready)
 			{
 				return;
 			}
 			s_dirty = false;
+			try
+			{
+				Write();
+			}
+			catch (Exception e)
+			{
+				ServersidePlugin.logger.LogWarning($"Item ledger: could not save {s_path}: {e.Message}");
+			}
+		}
+
+		private static void Write()
+		{
 			List<string> lines = new List<string>
 			{
 				"# Sarkastic.eu Dedicated Simulation: item ledger -- what each character got on this world and still has by the count. Tab separated:",
@@ -1594,25 +1694,18 @@ namespace Valheim_Serverside.Features
 			{
 				lines.Add(string.Join("\t", new[]
 				{
-					a.id.ToString(CultureInfo.InvariantCulture), a.exact ? "exact" : "unknown", FormatTime(a.since), (a.name ?? "").Replace('\t', ' '),
+					a.id.ToString(CultureInfo.InvariantCulture), a.exact ? "exact" : "unknown", FormatTime(a.since), (a.name ?? "").Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' '),
 					string.Join(",", a.balance.Where(kv => kv.Value > 0).OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value.ToString(CultureInfo.InvariantCulture)}")),
 					string.Join(",", a.quality.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}@{kv.Value.ToString(CultureInfo.InvariantCulture)}")),
 				}));
 			}
-			try
+			string temp = s_path + ".tmp";
+			File.WriteAllLines(temp, lines);
+			if (File.Exists(s_path))
 			{
-				string temp = s_path + ".tmp";
-				File.WriteAllLines(temp, lines);
-				if (File.Exists(s_path))
-				{
-					File.Delete(s_path);
-				}
-				File.Move(temp, s_path);
+				File.Delete(s_path);
 			}
-			catch (Exception e)
-			{
-				ServersidePlugin.logger.LogWarning($"Item ledger: could not save {s_path}: {e.Message}");
-			}
+			File.Move(temp, s_path);
 		}
 
 		private static string FormatTime(DateTime t)
@@ -1653,7 +1746,15 @@ namespace Valheim_Serverside.Features
 		{
 			static void Prefix(ZDO __instance, out object __state)
 			{
-				__state = BeforeDeserialize(__instance);
+				__state = null;
+				try
+				{
+					__state = BeforeDeserialize(__instance);
+				}
+				catch (Exception e)
+				{
+					Warn(e);
+				}
 			}
 
 			static void Postfix(ZDO __instance, object __state)
@@ -1668,7 +1769,7 @@ namespace Valheim_Serverside.Features
 			// Read the objects before the game deletes them; the package is read again by the game.
 			static void Prefix(long sender, ZPackage pkg)
 			{
-				if (!s_ready || Configuration.itemLedgerMode.Value == Mode.Off)
+				if (!s_ready || Configuration.itemLedgerMode.Value == Mode.Off || sender == 0L || sender == ZDOMan.GetSessionID())
 				{
 					return;
 				}
@@ -1691,21 +1792,32 @@ namespace Valheim_Serverside.Features
 		{
 			static void Prefix(Smelter __instance, out int __state)
 			{
-				__state = __instance.m_nview && __instance.m_nview.IsOwner() ? __instance.GetQueueSize() : -1;
+				__state = -1;
+				try
+				{
+					__state = s_ready && __instance.m_nview && __instance.m_nview.IsOwner() ? __instance.GetQueueSize() : -1;
+				}
+				catch (Exception e)
+				{
+					Warn(e);
+				}
 			}
 
 			static void Postfix(Smelter __instance, long sender, string name, int __state)
 			{
-				if (__state < 0 || __instance.GetQueueSize() != __state + 1)
+				Guard(() =>
 				{
-					return;
-				}
-				bool undo = false;
-				Guard(() => Fed(sender, name, "put into a " + global::Utils.GetPrefabName(__instance.gameObject), ref undo));
-				if (undo)
-				{
-					__instance.m_nview.GetZDO().Set(ZDOVars.s_queued, __state);
-				}
+					if (__state < 0 || __instance.GetQueueSize() != __state + 1)
+					{
+						return;
+					}
+					bool undo = false;
+					Fed(sender, name, "put into a " + global::Utils.GetPrefabName(__instance.gameObject), ref undo);
+					if (undo)
+					{
+						__instance.m_nview.GetZDO().Set(ZDOVars.s_queued, __state);
+					}
+				});
 			}
 		}
 
@@ -1714,21 +1826,32 @@ namespace Valheim_Serverside.Features
 		{
 			static void Prefix(Smelter __instance, out float __state)
 			{
-				__state = __instance.m_nview && __instance.m_nview.IsOwner() && __instance.m_fuelItem ? __instance.GetFuel() : -1f;
+				__state = -1f;
+				try
+				{
+					__state = s_ready && __instance.m_nview && __instance.m_nview.IsOwner() && __instance.m_fuelItem ? __instance.GetFuel() : -1f;
+				}
+				catch (Exception e)
+				{
+					Warn(e);
+				}
 			}
 
 			static void Postfix(Smelter __instance, long sender, float __state)
 			{
-				if (__state < 0f || __instance.GetFuel() <= __state)
+				Guard(() =>
 				{
-					return;
-				}
-				bool undo = false;
-				Guard(() => Fed(sender, __instance.m_fuelItem.gameObject.name, "fueled a " + global::Utils.GetPrefabName(__instance.gameObject) + " with", ref undo));
-				if (undo)
-				{
-					__instance.SetFuel(__state);
-				}
+					if (__state < 0f || __instance.GetFuel() <= __state)
+					{
+						return;
+					}
+					bool undo = false;
+					Fed(sender, __instance.m_fuelItem.gameObject.name, "fueled a " + global::Utils.GetPrefabName(__instance.gameObject) + " with", ref undo);
+					if (undo)
+					{
+						__instance.SetFuel(__state);
+					}
+				});
 			}
 		}
 
@@ -1738,11 +1861,14 @@ namespace Valheim_Serverside.Features
 		{
 			static void Postfix(CookingStation __instance, long sender, string itemName)
 			{
-				if (__instance.m_nview && __instance.m_nview.IsOwner())
+				Guard(() =>
 				{
-					bool ignored = false;
-					Guard(() => Fed(sender, itemName, "put on a cooking station", ref ignored));
-				}
+					if (__instance.m_nview && __instance.m_nview.IsOwner())
+					{
+						bool ignored = false;
+						Fed(sender, itemName, "put on a cooking station", ref ignored);
+					}
+				});
 			}
 		}
 
@@ -1751,11 +1877,14 @@ namespace Valheim_Serverside.Features
 		{
 			static void Postfix(Fermenter __instance, long sender, int nameHash)
 			{
-				if (__instance.m_nview && __instance.m_nview.IsOwner() && s_tracked.TryGetValue(nameHash, out string item))
+				Guard(() =>
 				{
-					bool ignored = false;
-					Guard(() => Fed(sender, item, "put into a fermenter", ref ignored));
-				}
+					if (__instance.m_nview && __instance.m_nview.IsOwner() && s_tracked.TryGetValue(nameHash, out string item))
+					{
+						bool ignored = false;
+						Fed(sender, item, "put into a fermenter", ref ignored);
+					}
+				});
 			}
 		}
 
@@ -1766,6 +1895,20 @@ namespace Valheim_Serverside.Features
 			static bool Prefix(OfferingBowl __instance, long senderId, bool removeItemsFromInventory, out bool __state)
 			{
 				__state = false;
+				try
+				{
+					return Allows(__instance, senderId, removeItemsFromInventory, ref __state);
+				}
+				catch (Exception e)
+				{
+					Warn(e);
+					__state = false;
+					return true;
+				}
+			}
+
+			private static bool Allows(OfferingBowl __instance, long senderId, bool removeItemsFromInventory, ref bool __state)
+			{
 				if (!s_ready || Configuration.itemLedgerMode.Value == Mode.Off || !removeItemsFromInventory || !__instance.m_bossItem
 					|| !__instance.m_nview || !__instance.m_nview.IsOwner() || __instance.IsBossSpawnQueued())
 				{
@@ -1801,13 +1944,20 @@ namespace Valheim_Serverside.Features
 
 			static void Postfix(OfferingBowl __instance, long senderId, bool __state)
 			{
-				if (!__state || !__instance.IsBossSpawnQueued())
+				if (!__state)
 				{
 					return;
 				}
-				Account account = AccountOf(senderId);
-				string item = __instance.m_bossItem.gameObject.name;
-				Guard(() => Report(account, senderId, Out(account, item, __instance.m_bossItems, 1, "summoned a boss"), item, 1, "summoned a boss with", canTakeAway: false));
+				Guard(() =>
+				{
+					if (!__instance.IsBossSpawnQueued())
+					{
+						return;
+					}
+					Account account = AccountOf(senderId);
+					string item = __instance.m_bossItem.gameObject.name;
+					Report(account, senderId, Out(account, item, __instance.m_bossItems, 1, "summoned a boss"), item, 1, "summoned a boss with", canTakeAway: false);
+				});
 			}
 		}
 
@@ -1816,7 +1966,7 @@ namespace Valheim_Serverside.Features
 		{
 			static void Prefix()
 			{
-				if (s_dirty)
+				if (s_ready && s_dirty)
 				{
 					Save();
 				}
