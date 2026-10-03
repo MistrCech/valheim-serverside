@@ -1,4 +1,7 @@
-## [1.12.0] - 2026-09-28
+## [1.12.0] - 2026-10-03
+
+Valheim 1.0.16 (Steam build 25527701, 25 September 2026) changes none of the methods this mod
+patches; 1.11.1 passes the patch, transpiler and raid checks on it, and so does this release.
 
 ### Added
 
@@ -17,20 +20,45 @@
   a builder of the world let in; on their return a new sword and new raid readiness logged (or
   kicked with `ChangedAway = Kick`), an unchanged character let in, and `allow` both cancelling a
   pending kick and letting a kicked character in.
-- `[ItemLedger] Mode` (Off by default; LogOnly; On): an account per character of the valuable items
-  (`Items`: ores, metals, scrap, Eitr, dragon tears and eggs) it got on the server -- picked up
-  (a DestroyZDO from that player), taken out of a container -- and put back into the world --
-  dropped, put into a container or smelter, built with, died carrying. More out than ever in (and
-  than it could make: bronze from copper and tin, smallest recipe first) came from another world:
-  written to `<world>.guard.log`, and with On taken away (a dropped stack cut down, a container
-  emptied of it once closed, a smelter refusing it). Only exact accounts are acted on: a new, fresh
-  character from zero, any other after its first death here, when the tombstone shows the whole
-  bag; until then findings are "unverified". Traders' goods are not tracked. Accounts in
-  `<world>.items.txt`. Tested with simulated clients on a copy of a live world: black metal put
-  into a chest, bronze dropped beyond what copper and tin could make (one bar allowed), iron scrap
-  fed to a smelter -- logged, and with On taken out of the chest, the stack cut from 3 to 1, the
-  smelter refusing it; an older character's silver only noted as unverified until its death, then
-  2 silver beyond what it took back taken away; a forge built from copper it never got only logged.
+- `[ItemLedger] Mode` (Off by default; LogOnly; On): an account per character of the items that lock
+  progress, for servers whose players keep vanilla clients: what it got on the server and what it
+  put back into the world. In: picked up (a DestroyZDO from that player), taken out of a container
+  or off a stand. Out: dropped -- only what has been in a bag, which the game marks, so the
+  resources of a removed piece do not count, and what falls out of a chest or stand its owner
+  removed is matched against what it held -- put into a container or on a stand, fed to a smelter,
+  cooking station or fermenter, offered at a boss altar, built with, died carrying. What a character
+  wears and holds is checked every 10 seconds; an upgrade shows as a higher quality. More out than
+  in, and than it could have crafted, came from another world: written to `<world>.guard.log`, and
+  with On taken away -- a dropped stack cut down, a container or stand emptied of it once nobody
+  uses it, a smelter's queue undone, a boss altar refusing -- and the player told (`Message`,
+  `AltarMessage`). Only exact accounts are acted on: a new, fresh character from zero, any other
+  after its first death here, when the tombstone shows the whole bag; for the first `GraceHours`
+  (168) no character counts as new. Admins are exempt. Accounts in `<world>.items.txt`.
+- `[ItemLedger] Items = auto`: the items that lock progress, from the game's own data -- what cannot
+  go through a portal, what bosses drop and what summons them, every material that all recipes and
+  pieces using it need more than a level 1 workbench for, every item that all its recipes need more
+  for. 544 items in Valheim 1.0.16, listed by reason in the guard log at startup; `ExtraItems` and
+  `ExcludeItems` adjust it, and what traders sell is always left out.
+- Crafting is not seen, so a tracked item counts as crafted from the tracked items the character got,
+  reckoned in its favour wherever the game leaves room: the crafting bonus at its luckiest (three
+  more per craft at a station, for a lucky batch of five), an upgrade made at the 1.0 upgrade station
+  with upgrader items, an item broken there handing back 35 % of its materials (never one it wears),
+  a caught fish bringing the most its extra drops can (a Fish10 one silver, a Fish6 two iron ore).
+  A recipe is paid in full or not at all, and an item the game removes after an hour with nobody
+  near is no pickup.
+- Tested on a copy of a live world on Valheim 1.0.16, with simulated vanilla clients sending through
+  the server's own network entry points (`ZDOMan.RPC_ZDOData`, routed calls): black metal put into a
+  chest, iron dropped, iron scrap and copper ore fed to a smelter, a boss trophy put on a stand,
+  silver beyond what one caught fish brings and copper the game had removed 37 m away put into a
+  chest, a boss summoned with blood the character never got -- logged, and with On taken out of the
+  chest, cut, dropped from the smelter's queue, taken off the stand, refused by the altar. Bronze
+  dropped beyond the four bars its copper and tin could make with the best luck: the one bar over
+  logged, and only logged when the drop was picked up again at once. Nothing logged for a chest a
+  player removed or a trophy taken off a stand, picked up again; a caught fish's silver; bronze from
+  a sword broken at the upgrade station once it was no longer worn. Its upgrade while worn was
+  reported as the cheaper of the two ways, one upgrader item. An older character's silver noted as
+  unverified until its death, then 2 beyond what it took back taken away; a forge built from copper
+  it never got only logged.
 - The character guard and the item ledger write their own log, `<world>.guard.log`.
 
 ### Fixed

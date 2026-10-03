@@ -47,7 +47,7 @@ Compared to Serverside Simulations 1.1.9 (details in the [changelog](CHANGELOG.m
 - **Smoother server frames:** world updates reach every player at a steady interval however many are online, one slow frame no longer makes the next one slow through physics catch-up, and new zones are generated one per tick instead of one per exploring player. A periodic log shows frame times and what they are spent on.
 - **`save` and `stop` console commands** for server panels that write to standard input.
 - **Character guard** (off by default): a check on the characters players join with, server-side only, so clients stay vanilla. A character this world has not seen must be fresh, and a known one that comes back changed was played elsewhere -- see below.
-- **Item ledger** (off by default): an account per character of the valuable items it got here and put back into the world; items that came from another world are logged, or taken away -- see below.
+- **Item ledger** (off by default): an account per character of the items that lock progress, what it got here and what it put back into the world; items that came from another world are logged, or taken away -- see below.
 - **Safety:** a startup check warns when a vanilla method the mod replaces has changed in a game update; if the core patches cannot be applied, the mod removes itself and the server runs vanilla.
 
 ## Installation
@@ -93,8 +93,12 @@ Clients need nothing.
 | `[CharacterGuard] ExemptAdmins` | true | Admins are never checked. |
 | `[CharacterGuard] NewCharacterMessage` / `ChangedAwayMessage` | (English text) | Shown in the middle of the player's screen before the kick. |
 | `[ItemLedger] Mode` | Off | `Off`, `LogOnly` or `On`: keep item accounts per character (see Item ledger below); `On` also takes away items that came from another world. |
-| `[ItemLedger] Items` | ores, metals, scrap, Eitr, DragonTear, DragonEgg | Item prefab names to keep accounts of. Items traders sell are left out automatically. |
-| `[ItemLedger] LogAllMovements` | false | Also log every movement of a tracked item, not only what cannot be accounted for. |
+| `[ItemLedger] Items` | auto | `auto`: the items that lock progress, from the game's own data (see below). Or item prefab names, comma separated. Items traders sell are always left out. |
+| `[ItemLedger] ExtraItems` / `ExcludeItems` | (empty) | Item prefab names to add to the list, or never to keep accounts of. |
+| `[ItemLedger] LogAllMovements` | false | Also log every movement of a tracked item (and every craft the ledger counts), not only what cannot be accounted for. |
+| `[ItemLedger] ExemptAdmins` | true | Admins get no account and are never checked. |
+| `[ItemLedger] GraceHours` | 168 | For this long after the ledger first runs on a world, no character counts as new: the players who are already around come back with what they had. |
+| `[ItemLedger] Message` / `AltarMessage` | (English text) | Shown in the middle of the player's screen when items are taken away, or a boss altar refuses them. |
 | `[Performance] StatsIntervalMinutes` | 5 | How often to log FPS, frame times, physics steps per frame, the cost of world updates and zone generation, and what the slowest frame was doing, while players are online. 0 disables. |
 
 ## Character guard
@@ -110,12 +114,21 @@ What a character carries without wearing it stays invisible to the server: this 
 
 ## Item ledger
 
-The server never sees a bag, but nearly every way into and out of one passes through an object it does see. In: picking an item up off the ground (the player takes the item over and deletes it), taking it out of a chest, cart, ship or tombstone. Out: dropping it, putting it into a container or a smelter, kiln or refinery, building with it, dying with it (the tombstone is the whole bag). Crafting is not seen, but a tracked item made from tracked items (bronze from copper and tin) is counted as made from what the character had; what traders sell is not tracked.
+The server never sees a bag, but nearly every way into and out of one passes through an object it does see:
 
-So the server keeps an account per character of the tracked items (`Items`: ores, metals, scrap and a few boss drops). When a character puts more of an item into the world than it ever got here, and could have made, the rest came from somewhere else. That is written to `<world>.guard.log` next to the world save; with `Mode = On` it is also taken away: a dropped stack is cut down, a container loses it once nobody has it open, a smelter refuses it (the client has already taken it out of the bag), and the player sees a message. Pieces built with it are only logged.
+- **In:** picking an item up (the player takes it over and deletes it), taking it out of a chest, cart, ship or tombstone, or off an item stand or armour stand.
+- **Out:** dropping it, putting it into a container or on a stand, feeding it to a smelter, kiln, refinery, cooking station or fermenter, offering it at a boss altar, building with it, dying with it (the tombstone is the whole bag). A drop counts only if the item has been in a bag: the game marks everything in a bag, and what falls out of a destroyed piece, a creature or a rock carries no mark.
+- **Worn:** what a character wears and holds is checked every few seconds; an upgrade shows as a higher quality.
+
+Crafting, upgrading, eating, buying from a trader and what a caught fish brings along are not seen. So a tracked item the character never got here counts as crafted if its recipe can be paid from the tracked items it did get, and the ledger reckons in the player's favour wherever the game leaves room: a craft at a station yields the most the crafting bonus can give (three more per craft for a lucky batch of five), an upgrade may have been made at Valheim 1.0's upgrade station, which takes only upgrader items, an item it held may have broken there and handed part of its materials back, and a caught fish counts in the most its extra drops can bring (a Fish10 one silver). What traders sell is not tracked.
+
+**Which items:** `Items = auto` takes the items that lock progress, from the game's own data: what cannot go through a portal (ores, metals, dragon eggs), what bosses drop and what summons them, every material that all recipes and pieces using it need more than a level 1 workbench for, and every item that all its recipes need more for -- what a forge, cauldron, black forge or galdr table makes, and what goes into it. In Valheim 1.0.16 that is about 530 items; the guard log lists them by reason at startup.
+
+When a character puts more of an item into the world than it ever got here, and could have made, the rest came from somewhere else. That is written to `<world>.guard.log` next to the world save; with `Mode = On` it is also taken away -- a dropped stack is cut down, a container or stand loses it once nobody uses it, a smelter drops it from its queue, a boss altar refuses to summon -- and the player sees a message. What was built with it, put on a cooking station or fermenter, or is worn is only logged.
 
 - A new, fresh character (see Character guard) starts at zero, so its account is exact from the start.
-- For a character that existed before, what it carried when counting began is unknown. Its findings are logged as unverified and never acted on, until its first death here: the tombstone shows the whole bag, and from then on its account is exact.
+- For any other character, what it carried when counting began is unknown. Its findings are logged as unverified and never acted on, until its first death here: the tombstone shows the whole bag, and from then on its account is exact.
+- For the first `GraceHours` after the ledger first runs on a world, no character counts as new.
 - The accounts are kept in `<world>.items.txt`.
 
 Start with `LogOnly` for a while and read the guard log before switching to `On`.
