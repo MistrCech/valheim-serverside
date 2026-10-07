@@ -1,4 +1,4 @@
-# Sarkastic.eu Dedicated Simulation
+# Sarkastic.gg Dedicated Simulation
 
 > **Fork of [Serverside Simulations](https://github.com/ddormer/valheim-serverside)** by ddormer, which is no longer maintained as of 2026, renamed at the original authors' request. Updated for Valheim 1.0, building on [ddormer/valheim-serverside#118](https://github.com/ddormer/valheim-serverside/pull/118) by @mreastman.
 
@@ -53,8 +53,8 @@ Compared to Serverside Simulations 1.1.9 (details in the [changelog](CHANGELOG.m
 ## Installation
 
 1. Install [BepInExPack_Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) 5.4.2350 or newer on the dedicated server.
-2. Copy `SarkasticEU_Dedicated_Simulation.dll` from the [latest release](https://github.com/MistrCech/valheim-serverside/releases/latest) into `BepInEx/plugins/`.
-3. Back up the world and restart the server. `BepInEx/LogOutput.log` should show `Sarkastic.eu Dedicated Simulation installed` and `Vanilla drift check passed`.
+2. Copy `SarkasticGG_Dedicated_Simulation.dll` from the [latest release](https://github.com/MistrCech/valheim-serverside/releases/latest) into `BepInEx/plugins/`.
+3. Back up the world and restart the server. `BepInEx/LogOutput.log` should show `Sarkastic.gg Dedicated Simulation installed` and `Vanilla drift check passed`.
 
 Clients need nothing.
 

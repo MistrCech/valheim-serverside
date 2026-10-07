@@ -1,3 +1,13 @@
+## [1.12.1] - 2026-10-07
+
+### Changed
+
+- Renamed to Sarkastic.gg Dedicated Simulation: the community moved from sarkastic.eu to sarkastic.gg.
+  The DLL is now `SarkasticGG_Dedicated_Simulation.dll`; delete `SarkasticEU_Dedicated_Simulation.dll`
+  from `BepInEx/plugins` when upgrading (BepInEx would load only the newer of the two, but the old file
+  stays behind). The plugin GUID, and so the config file `MVP.Valheim_Serverside_Simulations.cfg`, is
+  unchanged, and nothing else is.
+
 ## [1.12.0] - 2026-10-03
 
 Valheim 1.0.16 (Steam build 25527701, 25 September 2026) changes none of the methods this mod

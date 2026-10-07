@@ -1686,7 +1686,7 @@ namespace Valheim_Serverside.Features
 		{
 			List<string> lines = new List<string>
 			{
-				"# Sarkastic.eu Dedicated Simulation: item ledger -- what each character got on this world and still has by the count. Tab separated:",
+				"# Sarkastic.gg Dedicated Simulation: item ledger -- what each character got on this world and still has by the count. Tab separated:",
 				"# id, exact/unknown (unknown = what it carried when counting began is not known), counting since (UTC), name, item=amount,..., item@highest quality seen,...",
 				"started\t" + FormatTime(s_started),
 			};

@@ -587,7 +587,7 @@ namespace Valheim_Serverside.Features
 		{
 			List<string> lines = new List<string>
 			{
-				"# Sarkastic.eu Dedicated Simulation: characters known on this world (character guard). Tab separated:",
+				"# Sarkastic.gg Dedicated Simulation: characters known on this world (character guard). Tab separated:",
 				"# id, first seen, last seen (UTC), why known, account, name, worn when last leaving, raids ready for then ('-' = not seen leaving yet).",
 			};
 			foreach (Record r in s_records.Values.OrderBy(r => r.firstSeen))
