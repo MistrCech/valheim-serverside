@@ -22,22 +22,11 @@ namespace Valheim_Serverside.Features
 		world where the boss still lives -- its timer runs and it spawns nothing. Raids are left
 		alone: who they target is already decided per player (`-setkey playerevents`).
 
-		"Personally got that far" is read from the one thing a vanilla client tells the server about
-		its own progress: the list of raids it is still "ready for", which the client works out
-		from its own known items and keys and sends as ZNet.m_serverSyncedPlayerData["possibleEvents"]
-		(RandEventSystem.PlayerIsReadyForEvent, the same list CharacterGuard reads). The main raids
-		form a chain -- each needs the previous boss's drop known and stops once the next boss's drop
-		is -- so the first chain raid still on the list tells how far the player is. Two raids that
-		need a boss's drop actually known (foresttrolls: the Elder's, surtlings: Bonemass's) confirm
-		the step, because the chain raids also stop for a player who merely holds that boss's power,
-		and a power can be taken from a trophy someone else hung. Everything was checked against a
-		port of PlayerIsReadyForEvent over the game's raid data (1.0.16): exact for every progress
-		level; taking other people's powers cannot lift a player at or below the Elder; above that,
-		only taking the Queen's power plus every power before it in the chain (from Bonemass on:
-		Moder's, from Moder on: Yagluth's) makes a player look past the Queen. Fader has nothing
-		of his own in the list, so his Charred count as the Queen's.
-
-		A player whose list has not arrived yet counts as having beaten nothing.
+		How far each player has got is read from their own client's raid list (Progress, shared with
+		the guardian stones): exact for every progress level, and other people's powers taken at a stone
+		cannot lift a player at or below the Elder. Fader leaves nothing of his own in that list, so his
+		Charred count as the Queen's. A player whose list has not arrived yet counts as having beaten
+		nothing.
 	*/
 	public class NightSpawnGuard : IFeature
 	{
@@ -58,78 +47,12 @@ namespace Valheim_Serverside.Features
 			{ "defeated_fader", 6 }, // nothing of Fader's own in the list; the Queen is the closest
 		};
 
-		private static readonly string[] s_bossNames = { "nothing", "Eikthyr", "the Elder", "Bonemass", "Moder", "Yagluth", "the Queen" };
-
-		// The raids the progress is read from; every one must exist in the game with a per-player condition.
-		private static readonly string[] s_evidence = { "army_eikthyr", "army_theelder", "foresttrolls", "army_bonemass", "surtlings", "army_moder", "army_goblin", "army_gjall", "army_seekers", "gemgoblin" };
-
 		// A key no world has: a spawn that needs it behaves as in a world where the boss still lives.
 		private const string HeldBackKey = "nightspawnguard-held-back";
-
-		// Raids with no per-player condition at all: every vanilla client lists them, so a list without any is not one.
-		private static HashSet<string> s_alwaysReady;
-		private static bool s_checked, s_usable;
 
 		private static readonly List<KeyValuePair<SpawnSystem.SpawnData, string>> s_heldBack = new List<KeyValuePair<SpawnSystem.SpawnData, string>>();
 		private static readonly HashSet<string> s_logged = new HashSet<string>();
 		private static int s_errors;
-
-		/*
-			The game's raid data must still be what the rule was worked out against; if it is not,
-			the guard stays out of the way (vanilla spawns) rather than guess.
-		*/
-		private static bool Usable()
-		{
-			if (s_checked)
-			{
-				return s_usable;
-			}
-			if (!RandEventSystem.instance)
-			{
-				return false;
-			}
-			s_checked = true;
-			List<RandomEvent> events = RandEventSystem.instance.m_events;
-			string[] missing = s_evidence.Where(name => !events.Any(ev => ev.m_name == name && HasPlayerCondition(ev))).ToArray();
-			s_alwaysReady = new HashSet<string>(events.Where(ev => !HasPlayerCondition(ev)).Select(ev => ev.m_name));
-			s_usable = missing.Length == 0 && s_alwaysReady.Count > 0;
-			if (!s_usable)
-			{
-				ServersidePlugin.logger.LogWarning($"Night spawn guard: the game's raid data is not what the progress rule was made for "
-					+ $"(missing or changed: {(missing.Length > 0 ? string.Join(", ", missing) : "no raid without a per-player condition")}); the guard does nothing and spawns stay vanilla.");
-			}
-			return s_usable;
-		}
-
-		private static bool HasPlayerCondition(RandomEvent ev)
-		{
-			return ev.m_altRequiredKnownItems.Count > 0 || ev.m_altRequiredNotKnownItems.Count > 0 || ev.m_altNotRequiredPlayerKeys.Count > 0
-				|| ev.m_altRequiredPlayerKeysAny.Count > 0 || ev.m_altRequiredPlayerKeysAll.Count > 0;
-		}
-
-		// How many bosses this player has beaten, in the game's order, as far as their own raid list shows.
-		internal static int Beaten(string possibleEvents)
-		{
-			if (string.IsNullOrEmpty(possibleEvents))
-			{
-				return 0;
-			}
-			HashSet<string> ready = new HashSet<string>(possibleEvents.Split(','));
-			if (!ready.Overlaps(s_alwaysReady))
-			{
-				return 0;
-			}
-			if (ready.Contains("army_eikthyr")) return 0;
-			if (ready.Contains("army_theelder")) return 1;
-			if (!ready.Contains("foresttrolls")) return 0; // past the Elder's raid without the Elder's drop: a power taken, not a kill
-			if (ready.Contains("army_bonemass")) return 2;
-			if (!ready.Contains("surtlings")) return 2; // the same for Bonemass
-			if (ready.Contains("army_moder")) return 3;
-			if (ready.Contains("army_goblin")) return 4;
-			if (ready.Contains("army_gjall") || ready.Contains("army_seekers")) return 5;
-			if (ready.Contains("gemgoblin")) return 3; // past Moder's and Yagluth's raids with neither shown by a drop: cannot tell which
-			return 6;
-		}
 
 		// The least progressed player in the zone decides; one the server cannot match to a peer counts as having beaten nothing.
 		private static int LeastBeaten(List<Player> players)
@@ -142,11 +65,7 @@ namespace Valheim_Serverside.Features
 			int least = int.MaxValue;
 			foreach (Player player in players)
 			{
-				int beaten = 0;
-				if (player && byCharacter.TryGetValue(player.GetZDOID(), out ZNetPeer peer) && peer.m_serverSyncedPlayerData.TryGetValue("possibleEvents", out string events))
-				{
-					beaten = Beaten(events);
-				}
+				int beaten = player && byCharacter.TryGetValue(player.GetZDOID(), out ZNetPeer peer) ? Progress.Beaten(peer) : 0;
 				least = Math.Min(least, beaten);
 			}
 			return least;
@@ -173,7 +92,7 @@ namespace Valheim_Serverside.Features
 						if (least < 0)
 						{
 							// UpdateSpawning has just filled this with the players in the zone (the same list it spawns around).
-							if (!Usable() || SpawnSystem.m_tempNearPlayers.Count == 0)
+							if (!Progress.Readable() || SpawnSystem.m_tempNearPlayers.Count == 0)
 							{
 								return;
 							}
@@ -188,7 +107,7 @@ namespace Valheim_Serverside.Features
 						if (s_logged.Add(spawner.m_name + "/" + least))
 						{
 							ServersidePlugin.logger.LogInfo($"Night spawn guard: holding back {spawner.m_name} near {SpawnSystem.m_tempNearPlayers.Count} player(s) "
-								+ $"-- it needs {s_bossNames[needed]} beaten, the least progressed of them has beaten {s_bossNames[least]}");
+								+ $"-- it needs {Progress.BossNames[needed]} beaten, the least progressed of them has beaten {Progress.BossNames[least]}");
 						}
 					}
 				}

@@ -112,6 +112,8 @@
     <Compile Include="Features\CharacterGuard.cs" />
     <Compile Include="Features\ItemLedger.cs" />
     <Compile Include="Features\FireControl.cs" />
+    <Compile Include="Features\GuardianStones.cs" />
+    <Compile Include="Features\Progress.cs" />
     <Compile Include="Features\NightSpawnGuard.cs" />
     <Compile Include="Features\Core.cs" />
     <Compile Include="Utils.cs" />

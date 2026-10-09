@@ -55,6 +55,10 @@ namespace PluginConfiguration
 
 		public static ConfigEntry<bool> nightSpawnGuardEnabled;
 
+		public static ConfigEntry<bool> guardianStonesEnabled;
+		public static ConfigEntry<bool> guardianStonesExemptAdmins;
+		public static ConfigEntry<string> guardianStonesMessage;
+
 		public static ConfigEntry<bool> fireControlEnabled;
 		public static ConfigEntry<float> fireControlMaxRadius;
 		public static ConfigEntry<int> fireControlMaxSpread;
@@ -157,6 +161,13 @@ namespace PluginConfiguration
 
 			nightSpawnGuardEnabled = config.Bind<bool>("NightSpawnGuard", "Enabled", false,
 				"Hold back the ambient spawns that come with boss progress (Greydwarfs at night after Eikthyr, Draugr and Greydwarf Elites and Shamans after the Elder, Skeletons after Bonemass, Goblins after Yagluth, Seekers and Ticks after the Queen, Charred after Fader) around a group of players until every player in that spawn zone has got that far themselves, as their own client's raid list shows it. Until then the zone behaves as if the boss were still alive. In a group the least progressed player decides. Raids are not affected (-setkey playerevents decides those per player).");
+
+			guardianStonesEnabled = config.Bind<bool>("GuardianStones", "Enabled", false,
+				"Show a boss's trophy on its guardian stone, and so offer its power, only to players who have beaten that boss themselves, as their own client's raid list shows it (the same reading as the night spawn guard). To everyone else's game the stone is empty: a vanilla client cannot take a power it cannot see, and the server could not take one back. Players who may not use a stone cannot hang a trophy on it either.");
+			guardianStonesExemptAdmins = config.Bind<bool>("GuardianStones", "ExemptAdmins", true,
+				"Admins see every stone as it is.");
+			guardianStonesMessage = config.Bind<string>("GuardianStones", "Message", "This power is yours once you have beaten {0} yourself.",
+				"Shown in the middle of the screen of a player who stands at a stone holding a trophy they may not use, at most once a quarter of an hour per stone. {0} is the boss. Empty: no message.");
 
 			fireControlEnabled = config.Bind<bool>("FireControl", "Enabled", false,
 				"Limit how far fire spreads (the Fire world modifier, and the Ashlands, which always burn). See the README for how far each source reaches in the game.");

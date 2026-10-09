@@ -1,3 +1,46 @@
+## [1.14.0] - 2026-10-09
+
+### Added
+
+- `[GuardianStones]` (off by default): a boss's trophy on its guardian stone, and so its power, only for
+  players who have beaten that boss themselves. A power is taken and kept wholly in the player's own game,
+  so a server can never take one back; instead each player's game is sent the stone as that player may
+  use it: a stone whose boss they have not beaten arrives without its trophy (`s_item` set to 0 in the
+  stone's own data for that one serialization in `ZDOMan.SendZDOs`, and put back -- no revision change,
+  nothing saved), and their vanilla client has no power to offer. Their game would offer to hang a trophy
+  of their own on what looks empty, which first asks the stone's owner for it: refused where it reaches
+  the server, whether the server owns the stone (`ItemStand.RPC_RequestOwn`) or a player's game does (the
+  request is not passed on, `ZRoutedRpc.RouteRPC` -- that game would grant it); also refused while their
+  game may still hold an empty copy. A stone a player's game took over goes back to the server after
+  10 s. Data for a stone from a player who was sent it empty is not taken (`ZDO.Deserialize` skipped, the
+  server takes the stone back and raises its revision). Once a player gets that far, the stone's revision
+  is raised once (while the server owns it), and their game takes the trophy; an empty copy counts as
+  theirs until a newer revision has gone out. No stone is sent to a player until their raid list has
+  arrived (`ZDOMan.CreateSyncList`), so a veteran logging in at the temple is never sent them empty
+  first. A player standing at such a stone, or refused one, is told why (`Message`). Progress is read as
+  for the night spawn guard (now shared, `Progress`). The game's guardian stones set no world key and
+  their trophies cannot be taken down (read from its data). A review by three independent readers found
+  that a stone owned by another player's game let the request through to that game, that dropping the
+  bookkeeping when the same revision went out left a player's game with a stale empty copy, and that a
+  veteran logging in got the stones empty first; all three are fixed above. Tested on a 1.0.16 copy of
+  the live world, all seven stones with their trophies, reading back what each simulated player's
+  connection was actually sent: a fresh player got every stone empty, a veteran all seven trophies, a
+  player past the Elder only Eikthyr's and the Elder's; the fresh player was refused the Eikthyr stand,
+  the veteran given it; with the veteran's game owning Yagluth's stone, the fresh player's request for it
+  was not passed on (the veteran's connection never got it) and the stone was the server's again 10 s
+  later; data sending Bonemass's stone back empty was not taken; the fresh player at Eikthyr's stone was
+  told; a request from the fresh player in the moment their list said past the Queen, while their game
+  still held the empty copy, was refused; then all seven stones went out to them with the trophies; a
+  player whose list had not arrived got no stone at all until it did, then all seven with the trophies;
+  every trophy in place at the end; patch, transpiler and raid checks pass; no exceptions from the
+  plugin.
+
+### Changed
+
+- The night spawn guard's README now says which drops count for each boss, read from the game's drop
+  tables: for Yagluth only a Torn Spirit (or a Wisp or Demister), for the Queen only a Majestic Carapace,
+  not their trophies; "passing the trophy around" was right only for the first four bosses.
+
 ## [1.13.0] - 2026-10-09
 
 ### Added
