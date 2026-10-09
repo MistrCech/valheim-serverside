@@ -17,6 +17,8 @@ namespace PluginConfiguration
 
 		public static ConfigEntry<bool> consoleCommandsEnabled;
 		public static ConfigEntry<int> unityJobWorkers;
+		public static ConfigEntry<string> cpuAffinity;
+		public static ConfigEntry<string> processPriority;
 
 		public static ConfigEntry<int> sendIntervalMs;
 		public static ConfigEntry<int> maxCatchUpMs;
@@ -63,6 +65,7 @@ namespace PluginConfiguration
 		public static ConfigEntry<float> fireControlMaxRadius;
 		public static ConfigEntry<int> fireControlMaxSpread;
 		public static ConfigEntry<bool> fireControlFireplaceIgnition;
+		public static ConfigEntry<bool> fireControlOnlyProjectiles;
 
 		public static void Load(ConfigFile config)
 		{
@@ -96,6 +99,11 @@ namespace PluginConfiguration
 					new AcceptableValueList<int>(1250, 852, 1252, 65001)));
 			unityJobWorkers = config.Bind<int>("Server", "UnityJobWorkers", 8,
 				"Upper limit on Unity job worker threads. Unity starts one per CPU core, and on many-core hosts the idle ones still use CPU. Only ever lowers the count. 0 leaves Unity's default.");
+			cpuAffinity = config.Bind<string>("Server", "CpuAffinity", "",
+				"Processors the server runs on. Empty: wherever the system puts it (as before). auto: one chiplet -- on AMD EPYC and Ryzen a die with its own L3 cache (and on the first EPYC generation its own memory) -- the one least busy over one second at startup, read from the system's own CPU topology, so the server's threads never move between dies. Or a list of processor numbers, e.g. 16-31 or 0-7,32-39. Processors above 63 are not used. Needs a restart.");
+			processPriority = config.Bind<string>("Server", "ProcessPriority", "Normal",
+				new ConfigDescription("Priority of the server process against everything else on the host: Normal (as before), AboveNormal or High. When the host is busy, a higher priority lets the server's frames go first. Needs a restart.",
+					new AcceptableValueList<string>("Normal", "AboveNormal", "High")));
 
 			sendIntervalMs = config.Bind<int>("Performance", "SendIntervalMs", 100,
 				new ConfigDescription("How often each player is sent world updates, in real milliseconds. Valheim sends to one player per frame, so each player waits players+1 frames: at 15 FPS with 4 players ~330 ms. Every send builds that player's list of nearby objects, so shorter intervals cost server CPU. 0 keeps Valheim's behaviour.",
@@ -179,6 +187,8 @@ namespace PluginConfiguration
 					new AcceptableValueRange<int>(-1, 10)));
 			fireControlFireplaceIgnition = config.Bind<bool>("FireControl", "FireplaceIgnition", true,
 				"A lit hearth, bonfire, campfire, iron fire pit, brazier or standing torch sets alight whatever burnable touches its flame (vanilla). Off: no fireplace ever does -- a hearth, brazier or torch then cannot start a fire at all, a bonfire or campfire still throws sparks.");
+			fireControlOnlyProjectiles = config.Bind<bool>("FireControl", "OnlyProjectiles", false,
+				"Only projectiles start fires: a fire arrow, a Staff of Embers fireball, a meteor or a lava rock, and what they set alight burns and spreads as before (within MaxRadius and MaxSpread). Nothing a base has -- no fireplace, bonfire, campfire, hearth, brazier or torch, no fire they lit -- throws a spark or sets anything alight, so a player's own build never sets it on fire. Surtlings' and fuling shamans' fireballs never set anything alight in the game.");
 
 			fixTeleportGhosts = config.Bind<bool>("Fixes", "TeleportGhosts", true,
 				"Tell the players near the old spot to drop a player who teleported away. Valheim 1.0 checks whether an object left their area before it stores the new position, so the teleported player stayed there for them, frozen, until they next crossed a zone line.");

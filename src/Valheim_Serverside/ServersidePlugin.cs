@@ -23,7 +23,7 @@ namespace Valheim_Serverside
 		// detect it by GUID still do and the two cannot be loaded side by side.
 		public const string PluginGUID = "MVP.Valheim_Serverside_Simulations";
 		public const string PluginName = "Sarkastic.gg Dedicated Simulation";
-		public const string PluginVersion = "1.14.0";
+		public const string PluginVersion = "1.15.0";
 
 		private static ServersidePlugin context;
 		public static ServersidePlugin instance => context;
@@ -57,6 +57,7 @@ namespace Valheim_Serverside
 
 			// Independent of the patches, so they stay on even if Core fails to apply and the server runs vanilla.
 			LimitJobWorkers(Configuration.unityJobWorkers.Value);
+			ProcessPlacement.Apply(Configuration.cpuAffinity.Value, Configuration.processPriority.Value, message => Logger.LogInfo(message));
 			LimitPhysicsCatchUp(Configuration.maxCatchUpMs.Value);
 			if (Configuration.consoleCommandsEnabled.Value)
 			{

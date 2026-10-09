@@ -1,3 +1,62 @@
+## [1.15.0] - 2026-10-09
+
+### Added
+
+- `[Server] CpuAffinity` (empty by default: as before): `auto` pins the server to one chiplet --
+  on AMD EPYC and Ryzen a die with its own L3 cache, on the first EPYC generation also with its own
+  memory -- the one least busy over one second at startup (measured on a background thread, so
+  startup does not wait), read from the system's own topology: Windows processor dies
+  (GetLogicalProcessorInformationEx), else NUMA nodes, else L3 groups; Linux `/sys` die, node and
+  cache lists. Only processors the process may already use are considered. Or a list such as
+  `16-31`. Windows sets the whole process (SetProcessAffinityMask: no thread can leave it); Linux
+  every thread, read again until no new one appears, and once more 30 s and 5 min after startup for
+  threads that set their own processors (Steam starts three). If anything is unclear -- one chiplet,
+  load unknown, a list that is not one -- nothing changes and the log says why.
+- `[Server] ProcessPriority`: `Normal` (as before), `AboveNormal` or `High` (Linux: nice -5 / -10).
+- `[FireControl] OnlyProjectiles` (off): only a projectile starts a fire -- a fire arrow, a Staff of
+  Embers fireball, a meteor, a lava rock -- and what it sets alight burns and spreads as before
+  (within `MaxRadius` and `MaxSpread`); nothing a base has (fireplaces, the fires they lit, the troll a
+  player summons) throws a spark or sets anything alight. Every spark and fire records whether its
+  chain began at a projectile (`sgg_fire_kind` in its ZDO). From the game's data: surtlings', fuling
+  shamans' and the Charred mages' fireballs never set anything alight.
+
+### Fixed
+
+- Fire control reached only the fires and fireplaces the server simulated. What a player builds or
+  sets alight is created and owned by their own game, and the server only takes over what nobody
+  owns or what its owner has left, so a hearth a player had just built, or the fire their arrow
+  started, burned by the game's own rules on that player's computer until they left or the server
+  restarted -- since 1.13.0. The server now takes every fire source (every fire, and every fireplace
+  that ignites or throws sparks) the moment a player's game names itself its owner: a new one, an
+  update from a game that has not heard yet, or a bare claim with no data (`Fireplace.Interact` on an
+  ownerless fireplace, which never reaches `ZDO.Deserialize`) -- noted in `ZDO.SetOwnerInternal` while
+  `ZDOMan.RPC_ZDOData` runs, taken when it is done. A fire taken over without a record of its chain
+  counts as from a projectile, rooted at its own position, unless a creature that throws sparks (the
+  summoned troll) is within 8 m; with `OnlyProjectiles` such a fire is put out. The server's copy of a
+  fire finds the piece, tree or log it burns on, so it goes out when that is gone.
+
+An independent review by two readers found that a bare ownership claim was missed, that a fire taken
+over lost the piece it burned on, that fires of the summoned troll counted as from a projectile, and,
+in the processor placement, that an unknown load picked a chiplet blindly, that offline Linux
+processors broke the die reading, that a priority failure could stop the plugin loading, and that
+malformed lists were read leniently; all fixed above. A player's own arrow or fireball still throws
+its first sparks on their computer, so `MaxRadius` counts from the first fire it lit (up to 2.9 m
+from an arrow's impact, 5.0 m from a fireball's).
+
+Tested on 1.0.16: with `OnlyProjectiles` a lit bonfire, hearth and floor brazier on a wood deck and
+two loose fires set nothing alight in 60 s, while a Staff of Embers burst (6 sparks, recorded as
+projectile) lit the grass twice and those fires threw sparks on. A simulated player's game reported a
+lit hearth, a fire and a fire arrow: the server took the hearth and the fire at once (the fire as from
+a projectile) and left the arrow; a newer update naming the player's game the owner, and a bare claim,
+were both taken back the same moment, with the owner change sent back. A fire reported 2 m from a
+summoned troll was put out; one on a wood floor found the floor and went out when the floor was
+destroyed. Processor placement on a Ryzen 9 7900X3D: `auto` read 2 dies and took the idler one
+(processors 0-5,12-17); the three threads Steam starts a few seconds later with all processors were
+moved back after 30 s, leaving all 88 threads on the die. On the live host (Windows 11, EPYC 7551P),
+a standalone probe with the same code, pinning only itself, read 4 processor dies (0-15, 16-31,
+32-47, 48-63), the same 4 NUMA nodes and 8 L3 groups, measured all 64 processors and took die 0-15,
+5 % busy; malformed lists were refused with the reason.
+
 ## [1.14.0] - 2026-10-09
 
 ### Added
