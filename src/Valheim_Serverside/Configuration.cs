@@ -32,6 +32,7 @@ namespace PluginConfiguration
 		public static ConfigEntry<bool> compatVcpSpawnQueue;
 		public static ConfigEntry<bool> compatVcpUnload;
 		public static ConfigEntry<bool> fixTeleportGhosts;
+		public static ConfigEntry<bool> fixServerSmoke;
 
 		public static ConfigEntry<bool> characterGuardEnabled;
 		public static ConfigEntry<Valheim_Serverside.Features.CharacterGuard.NewCharacterPolicy> characterGuardNewCharacters;
@@ -51,6 +52,13 @@ namespace PluginConfiguration
 		public static ConfigEntry<string> itemLedgerAltarMessage;
 		public static ConfigEntry<bool> itemLedgerLogAll;
 		public static ConfigEntry<string> itemLedgerMessage;
+
+		public static ConfigEntry<bool> nightSpawnGuardEnabled;
+
+		public static ConfigEntry<bool> fireControlEnabled;
+		public static ConfigEntry<float> fireControlMaxRadius;
+		public static ConfigEntry<int> fireControlMaxSpread;
+		public static ConfigEntry<bool> fireControlFireplaceIgnition;
 
 		public static void Load(ConfigFile config)
 		{
@@ -147,8 +155,24 @@ namespace PluginConfiguration
 			itemLedgerAltarMessage = config.Bind<string>("ItemLedger", "AltarMessage", "{0} x {1} did not come from this world; the altar refuses them.",
 				"Shown when a boss altar refuses items from another world (Mode = On). {0} is the amount, {1} the item.");
 
+			nightSpawnGuardEnabled = config.Bind<bool>("NightSpawnGuard", "Enabled", false,
+				"Hold back the ambient spawns that come with boss progress (Greydwarfs at night after Eikthyr, Draugr and Greydwarf Elites and Shamans after the Elder, Skeletons after Bonemass, Goblins after Yagluth, Seekers and Ticks after the Queen, Charred after Fader) around a group of players until every player in that spawn zone has got that far themselves, as their own client's raid list shows it. Until then the zone behaves as if the boss were still alive. In a group the least progressed player decides. Raids are not affected (-setkey playerevents decides those per player).");
+
+			fireControlEnabled = config.Bind<bool>("FireControl", "Enabled", false,
+				"Limit how far fire spreads (the Fire world modifier, and the Ashlands, which always burn). See the README for how far each source reaches in the game.");
+			fireControlMaxRadius = config.Bind<float>("FireControl", "MaxRadius", -1f,
+				new ConfigDescription("A fire starts only within this many metres (straight line) of the source its chain began at: a lit fireplace, or where a fire arrow, fireball or meteor came down. Sparks still fly, but one that lands farther away starts nothing. -1: no limit in metres (vanilla).",
+					new AcceptableValueRange<float>(-1f, 100f)));
+			fireControlMaxSpread = config.Bind<int>("FireControl", "MaxSpread", -1,
+				new ConfigDescription("How many further generations of sparks any fire may set off. The game gives a bonfire, hearth and iron fire pit 4, a campfire 2, braziers, torches and candles 1, fire arrows and fireballs 4. 0: nothing throws sparks except an arrow or fireball where it lands, and nothing that catches fire spreads it further. -1: as in the game.",
+					new AcceptableValueRange<int>(-1, 10)));
+			fireControlFireplaceIgnition = config.Bind<bool>("FireControl", "FireplaceIgnition", true,
+				"A lit hearth, bonfire, campfire, iron fire pit, brazier or standing torch sets alight whatever burnable touches its flame (vanilla). Off: no fireplace ever does -- a hearth, brazier or torch then cannot start a fire at all, a bonfire or campfire still throws sparks.");
+
 			fixTeleportGhosts = config.Bind<bool>("Fixes", "TeleportGhosts", true,
 				"Tell the players near the old spot to drop a player who teleported away. Valheim 1.0 checks whether an object left their area before it stores the new position, so the teleported player stayed there for them, frozen, until they next crossed a zone line.");
+			fixServerSmoke = config.Bind<bool>("Fixes", "ServerSmoke", true,
+				"Let fires and fireplaces make smoke on the server while a player is within 64 m, as they do on that player's computer in vanilla. A smoke source only puffs while the local player is that close, and a dedicated server has none, so the server never saw smoke: a fireplace in a room full of smoke, which every player sees go out, kept burning on the server -- using fuel, throwing sparks and setting what touches it alight -- and a fire under a roof never choked.");
 		}
 	}
 }

@@ -111,6 +111,8 @@
     <Compile Include="Features\DungeonLoadGuard.cs" />
     <Compile Include="Features\CharacterGuard.cs" />
     <Compile Include="Features\ItemLedger.cs" />
+    <Compile Include="Features\FireControl.cs" />
+    <Compile Include="Features\NightSpawnGuard.cs" />
     <Compile Include="Features\Core.cs" />
     <Compile Include="Utils.cs" />
     <Compile Include="Patching.cs" />

@@ -43,11 +43,14 @@ Compared to Serverside Simulations 1.1.9 (details in the [changelog](CHANGELOG.m
 - **Cap on Unity job worker threads**, which otherwise idle at CPU cost on many-core hosts.
 - **Fix: player changes that the save skipped.** Valheim 1.0 rewrites only the world chunks it marked as changed, and a change received from a player marks nothing, so what a player just built or moved could be missing after a restart.
 - **Fix: teleported players left behind as ghosts.** A player who portalled or respawned stayed visible to the players near the old spot, frozen, until they next crossed a zone line, because Valheim 1.0 checks whether an object left their area before it stores the new position.
+- **Fix: fireplaces smothered for everyone but the server.** A smoke source only puffs while the local player is within 64 m, and a dedicated server has none, so the server never saw smoke: a fireplace in a room full of smoke, which every player sees go out, kept burning on the server -- using fuel, throwing sparks and setting what touches it alight -- and a fire under a roof never choked.
 - **Admin commands on the server console:** `give <item> <amount> <player>`, `broadcast <text>`, `event <name> <player>`, `players`, `characters`, `allow <name>`, `save`, `stop`, typed into the panel the server runs in (AMP), and anything else goes to the game's own console (`kick`, `ban`, `banned`, `stopevent`, `setkey`, `removekey`, and after `devcommands` the cheats that need no player: `skiptime`, `listkeys`, `resetkeys` ...). A vanilla dedicated server never reads its console, and Valheim 1.0 does not let a player on a dedicated server use `spawn` from the game console, admin or not.
 - **Smoother server frames:** world updates reach every player at a steady interval however many are online, one slow frame no longer makes the next one slow through physics catch-up, and new zones are generated one per tick instead of one per exploring player. A periodic log shows frame times and what they are spent on.
 - **`save` and `stop` console commands** for server panels that write to standard input.
 - **Character guard** (off by default): a check on the characters players join with, server-side only, so clients stay vanilla. A character this world has not seen must be fresh, and a known one that comes back changed was played elsewhere -- see below.
 - **Item ledger** (off by default): an account per character of the items that lock progress, what it got here and what it put back into the world; items that came from another world are logged, or taken away -- see below.
+- **Night spawn guard** (off by default): the spawns that come with boss progress (Greydwarfs, Draugr, Skeletons, Goblins, Seekers, Charred, ...) held back around a player who has not got that far themselves, even where the world as a whole has moved past it -- see below.
+- **Fire control** (off by default): a limit in metres on how far fire spreads from its source, a cap on spark generations, and fireplaces that never set what touches them alight -- with the reach of every fire source in the game worked out -- see below.
 - **Safety:** a startup check warns when a vanilla method the mod replaces has changed in a game update; if the core patches cannot be applied, the mod removes itself and the server runs vanilla.
 
 ## Installation
@@ -83,6 +86,7 @@ Clients need nothing.
 | `[Performance] ServerTargetFps` | 60 | Frame rate the server aims for (the game sets 30). With time to spare a frame no longer waits 33 ms, so reactions to players halve; under load it changes nothing. 0 keeps 30. |
 | `[Fixes] SaveClientChanges` | true | Count a change that arrives from a player as a change to its world chunk, so the next save writes it. Valheim 1.0 rewrites only changed chunks and skips those. |
 | `[Fixes] TeleportGhosts` | true | Tell the players near the old spot to drop a player who teleported away. Valheim 1.0 checks whether an object left their area before it stores the new position, so the teleported player stayed there for them, frozen, until they next crossed a zone line. |
+| `[Fixes] ServerSmoke` | true | Let fires and fireplaces make smoke on the server while a player is within 64 m, as they do on that player's computer in vanilla: a fireplace in a smoke-filled room goes out on the server too, and fires under a roof can choke (see Fire control below). |
 | `[Fixes] DungeonLoadGuard` | true | Keep a dungeon whose room bundle fails to load from wedging its zone. When Unity refuses a bundle as already loaded, the game still reports the load as done and then throws, so the dungeon never spawns and its zone stays flagged as loading. The guard uses the bundle Unity already holds, reports a load that really failed as failed, and lets such a dungeon go so it is tried again next time. A vanilla dedicated server never loads dungeons; this mod does. |
 | `[Compat] ValheimCommunityPatchUnload` | false | Only with ValheimCommunityPatch installed. Its zone-diff unload drops objects outside the simulation distance of the server's reference position -- the world origin -- so objects around players are destroyed and created again on every pass. Off: that patch of it is removed when the world starts. On: it is kept, and the object lists are marked as edited on every pass so it takes the game's own unload check. |
 | `[Compat] ValheimCommunityPatchSpawnQueue` | false | Only with ValheimCommunityPatch installed. Its spawn queue orders new objects by distance from the world origin, so this mod's nearest-player ordering never runs. Off: that patch of it is removed when the world starts. On: it is kept. |
@@ -99,6 +103,11 @@ Clients need nothing.
 | `[ItemLedger] ExemptAdmins` | true | Admins get no account and are never checked. |
 | `[ItemLedger] GraceHours` | 168 | For this long after the ledger first runs on a world, no character counts as new: the players who are already around come back with what they had. |
 | `[ItemLedger] Message` / `AltarMessage` | (English text) | Shown in the middle of the player's screen when items are taken away, or a boss altar refuses them. |
+| `[NightSpawnGuard] Enabled` | false | Hold back the spawns that come with boss progress until every player in the spawn zone has got that far themselves (see Night spawn guard below). |
+| `[FireControl] Enabled` | false | Limit how far fire spreads (see Fire control below). With the three settings below at their defaults it changes nothing. |
+| `[FireControl] MaxRadius` | -1 | A fire starts only within this many metres (straight line) of the source its chain began at. -1: no limit. |
+| `[FireControl] MaxSpread` | -1 | Caps how many further generations of sparks any fire may set off. 0: nothing throws sparks except an arrow or fireball where it lands. -1: as in the game. |
+| `[FireControl] FireplaceIgnition` | true | Lit fireplaces set alight whatever burnable touches their flame. Off: a hearth, brazier or torch never starts a fire; a bonfire or campfire still throws sparks. |
 | `[Performance] StatsIntervalMinutes` | 5 | How often to log FPS, frame times, physics steps per frame, the cost of world updates and zone generation, and what the slowest frame was doing, while players are online. 0 disables. |
 
 ## Character guard
@@ -133,6 +142,46 @@ When a character puts more of an item into the world than it ever got here, and 
 - A fault in the ledger or the guard is logged (at most 20 times in a quarter of an hour) and never stops the game's own code. If the accounts or the known characters cannot be read, that feature stays off until the next start and leaves the file as it is.
 
 Start with `LogOnly` for a while and read the guard log before switching to `On`.
+
+## Night spawn guard
+
+Some of Valheim's ambient spawns come with boss progress: Greydwarfs at night in the Meadows once Eikthyr is dead; Draugr, Greydwarf Elites and Shamans, and Odin's night visits, once the Elder is; Skeletons once Bonemass is; Goblins (the hostile wandering kind) once Yagluth is; Seekers, Seeker Brood and Ticks once the Queen is; Charred once Fader is. Vanilla gates each one by a single world-wide key, set the moment *any* player beats that boss *anywhere*: a new player can meet Seekers in the Meadows because someone else on the server has been to the Mistlands.
+
+The guard holds such a spawn back in a zone -- the 64x64 m area vanilla spawns around; a spawn is placed 40-80 m from one of the players in it -- until every player in that zone has got that far themselves. Until then the spawn behaves there exactly as in a world where the boss still lives. In a group the least progressed player decides. Raids are not affected: with `-setkey playerevents` the game already picks raid targets by each player's own progress.
+
+How far a player has got is read from the one thing a vanilla client tells the server about its progress: the raids it is still "ready for", which the client works out from the items it knows and its own keys (`possibleEvents`, the same list the character guard reads). The main raids form a chain -- each needs the previous boss's drop known and stops once the next boss's is -- so the first one still listed tells how far the player is. The forest troll and surtling raids, which need the Elder's and Bonemass's drop actually known, confirm those two steps, because the chain raids also stop for a player who merely took that boss's power at a stone, where someone else may have hung the trophy.
+
+Checked against a port of the game's own raid check over its raid data (1.0.16): exact for every progress level, and no combination of other people's powers lifts a player at or below the Elder. Above that, a player looks further than they are only by taking the Queen's power and every power before it in the chain (from Bonemass's level Moder's too, from Moder's Yagluth's). A player whose share of a boss's drops all went to teammates counts as not having beaten that boss until they pick up one of its drops once -- passing the trophy around is enough. Fader leaves nothing of his own in the list, so his Charred count as the Queen's. A player whose list has not arrived yet counts as having beaten nothing. The Deep North's Jotun patrols are left as vanilla.
+
+## Fire control
+
+How fire spreads, from the game's own code and data (Valheim 1.0.16). Outside the Ashlands all of it needs the Fire world modifier (`-setkey fire`); in the Ashlands fire always works. Two ways a fire starts, both only from something lit:
+
+- **Sparks.** A bonfire or campfire throws one every 5 s (50 % chance each time), a fire burning on a piece every 2 s and one on the ground every 5 s (30 %), in a random upward-biased direction, under gravity alone. On a burnable piece that is not wet, a tree or a log a spark always starts a fire; on uncleared grass, outside the Mountains and Deep North and not in rain, with a 32 % chance.
+- **Direct ignition.** A lit fireplace sets alight whatever burnable is inside a small capsule around its flame, every 5 to 10 seconds.
+
+Every fire carries a generation count: it throws sparks only while the count is above 0, and what its sparks light gets one less. What a fireplace lights directly gets the fireplace's own count. How far each source reaches -- spark landing distances simulated with the game's own spark code, 400 000 sparks each, on flat ground:
+
+| Source | Sets alight directly | Its own sparks land at most | Spark flights the chain can make | Farthest on flat ground |
+|---|---|---|---|---|
+| Bonfire | 1.7 m around, up to 6.2 m above | 2.9 m (half within 2.3 m) | 4 | about 17 m |
+| Campfire | 0.45 m, up to 1.6 m high | 1.0 m | 2 | about 8 m |
+| Hearth | 1.4 m along the world's east-west axis, 0.8 m across, up to 1.7 m high (the capsule does not turn with the hearth) | -- | 4 | about 17 m |
+| Iron fire pit | 0.7 m | -- | 4 | about 16 m |
+| Floor and ceiling braziers | 0.3 m; a floor brazier reaches the floor under it | -- | 1 | about 4 m |
+| Standing torches (iron, wood, blue, green) | 0.1 m around the flame | -- | 1 | about 4 m |
+| Resin candle | 0.1 m, 0.25 % every 25 s | -- | 1 | about 4 m |
+| Sconce, lanterns, jack-o-turnip, snow lantern, NPC fire pits, forges, kilns, smelters | never | -- | -- | -- |
+| Fire arrow | -- | 3 sparks on impact, 2.9 m | 4 | about 15 m |
+| Staff of Embers fireball | -- | 6 sparks on impact, 5.0 m | 4 | about 17 m |
+
+A fire's sparks fly at 5 m/s and land up to 3.9 m away on flat ground, farther from a height: 5.1 m from a fire 2 m up, 6.2 m from 4 m, 7.8 m from 8 m, 9.1 m from 12 m. "Farthest" adds up the longest flight of every generation, so it is a ceiling: each one has to land on something burnable, in the right direction, before its fire goes out. Ashlands meteors and the summoned troll throw sparks too.
+
+A fire burns for at most 30 seconds (the game's own timer on every fire), and a spark that has not landed within 3 s is gone; in its 30 seconds a fire on a piece throws about four or five sparks, one on the ground about two. It goes out sooner when rain falls on it with no roof above, when what it burns on is destroyed, when a smoke bomb goes off within 3 m, or when it chokes on smoke: under a roof, more than 7 puffs within 2.9 m of a point 3.2 m above it. In a house that is the smoke of a hearth or fire pit; a fire's own smoke source stops puffing as soon as its smoke has nowhere to go -- every smoke source counts itself blocked with smoke within 0.75 m of it (0.4 m for braziers), and a fireplace whose smoke source has been blocked for 4 s goes out until the air clears (see `[Fixes] ServerSmoke`).
+
+On a dedicated server the weather that puts fires out, and makes pieces too wet to catch, is the Meadows' wherever the fire is: the server has no camera to follow, so the game falls back to the Meadows for it, in the Ashlands and the Swamp as much as anywhere.
+
+Vanilla has no limit in metres; `[FireControl]` adds one. Every spark and fire remembers the source its chain began at (a lit fireplace, or where an arrow, fireball or meteor came down; kept in its ZDO, so it survives a restart), and with `MaxRadius` set, a fire that would start farther than that from its source does not start. `MaxSpread` caps every generation count. `FireplaceIgnition = false` stops direct ignition entirely: a hearth, brazier or torch then cannot start a fire at all, while a bonfire or campfire still throws sparks.
 
 ## Hosting notes
 

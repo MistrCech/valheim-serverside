@@ -1,3 +1,57 @@
+## [1.13.0] - 2026-10-09
+
+### Added
+
+- `[NightSpawnGuard] Enabled` (off by default): the spawns that come with boss progress -- Greydwarfs
+  at night after Eikthyr; Draugr, Greydwarf Elites and Shamans and Odin after the Elder; Skeletons
+  after Bonemass (the Menhir alt biome's too); Goblins after Yagluth; Seekers, Seeker Brood and Ticks
+  after the Queen; Charred after Fader, read from the game's own spawn tables -- are held back in a
+  spawn zone until every player in it has got that far themselves. Until then the zone behaves as in
+  a world where that boss still lives (the entry's key is swapped for one no world has, for the one
+  call, and always restored, also when the game's code throws). A player's progress is read from the
+  raids their own client still lists for them (`possibleEvents`): the first main raid still listed,
+  with the forest troll and surtling raids confirming the Elder's and Bonemass's steps, so a power
+  taken at a stone someone else filled does not count as a kill. Worked out with a port of the game's
+  raid check over its 1.0.16 raid data, for every progress level and every combination of other
+  people's powers (README). Raids are not touched. If the game's raid data stops matching, the guard
+  does nothing and says so. Tested on a 1.0.16 server at midnight with every boss's key set, players
+  in open meadows: a newcomer with a veteran, and a newcomer who took Eikthyr's power from someone
+  else's trophy -- all 13 entries held back; two players past Bonemass -- only Goblins, Seekers,
+  Seeker Brood, Ticks and Charred held back, and a Greydwarf Elite spawned; a player past the Elder
+  holding four other bosses' powers -- held back from Skeletons on; two veterans -- nothing held back;
+  after a minute of it no spawn entry was left with the stand-in key (0 of 2602).
+- `[FireControl]` (off by default): `MaxRadius` -- a fire starts only within this many metres of the
+  source its chain began at (a lit fireplace, or where an arrow, fireball or meteor came down; every
+  spark and fire keeps it in its ZDO); `MaxSpread` -- caps every spark generation count;
+  `FireplaceIgnition` -- off, no fireplace sets alight what touches its flame, so a hearth, brazier or
+  torch cannot start a fire at all. How far every fire source reaches in the game is in the README,
+  worked out from its code and data: what each fireplace sets alight directly (the hearth about 1.4 m,
+  the bonfire 1.7 m around and 6.2 m up, a floor brazier the floor under it, standing torches 0.1 m;
+  sconces, lanterns, forges, kilns and smelters never), how far a spark lands (simulated with the
+  game's own spark code: bonfire 2.9 m, campfire 1.0 m, a fire 3.9 m on flat ground and farther from
+  a height), and how many generations follow. Tested on a fresh copy of the live world with a lit
+  bonfire on a 14x14 m wooden deck, a hearth 1.3 m from a wooden wall and a floor brazier on wood:
+  with the game's rules the hearth lit the wall three times in 15 s, the brazier the floor under it,
+  and the deck burned outwards to 8.4 m within 25 s of the first spark landing (7 floors gone after 40 s); with
+  `MaxRadius = 3` and `FireplaceIgnition = false` nothing was lit directly, no fire started beyond
+  3.0 m of its source (5 stopped, 3.1-6.1 m out) and no floor burned; 0 exceptions.
+
+### Fixed
+
+- Fireplaces smothered for everyone but the server (`[Fixes] ServerSmoke`, on). A smoke source only
+  puffs while the local player is within 64 m; a dedicated server has none, so the server never saw
+  smoke: a fireplace in a room full of smoke -- every smoke source counts itself blocked with smoke
+  within 0.75 m of it (0.4 m for braziers), and a fireplace blocked for 4 s goes out until the air
+  clears -- went out for every player and kept burning on the server, using fuel, throwing sparks
+  and setting what touches it alight; and a fire under a roof never choked. Now a smoke source
+  puffs on the server while any player is within the same 64 m (`SmokeSpawner.Spawn`, one read of
+  `Player.m_localPlayer` swapped for the nearest player in range), and the game's cap of 100 puffs
+  at a time is counted once per connected player. Tested: the server made smoke around a player
+  (up to 230 puffs with the test's fires and fireplaces), and a fire's own smoke source in a closed
+  room counted itself blocked once its smoke had nowhere to go, as it does on a player's computer;
+  0 exceptions. How often that smothers a fireplace or chokes a fire depends on the room; a fire
+  still burns 30 s at most either way.
+
 ## [1.12.1] - 2026-10-07
 
 ### Changed
