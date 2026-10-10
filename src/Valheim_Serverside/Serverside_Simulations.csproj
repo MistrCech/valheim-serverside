@@ -111,6 +111,7 @@
     <Compile Include="Features\DungeonLoadGuard.cs" />
     <Compile Include="Features\CharacterGuard.cs" />
     <Compile Include="Features\ItemLedger.cs" />
+    <Compile Include="Features\LocationIcons.cs" />
     <Compile Include="Features\FireControl.cs" />
     <Compile Include="Features\GuardianStones.cs" />
     <Compile Include="Features\Progress.cs" />

@@ -52,6 +52,7 @@ Compared to Serverside Simulations 1.1.9 (details in the [changelog](CHANGELOG.m
 - **Night spawn guard** (off by default): the spawns that come with boss progress (Greydwarfs, Draugr, Skeletons, Goblins, Seekers, Charred, ...) held back around a player who has not got that far themselves, even where the world as a whole has moved past it -- see below.
 - **Guardian stones** (off by default): a boss's trophy on its guardian stone, and so its power, only for players who have beaten that boss themselves; to everyone else's game the stone is empty -- see below.
 - **Fire control** (off by default): a limit in metres on how far fire spreads from its source, a cap on spark generations, fireplaces that never set what touches them alight, or fire from projectiles only, so a player's own build never sets it on fire -- with the reach of every fire source in the game worked out, and every fire and fireplace simulated by the server so the rules hold -- see below.
+- **Location icons** (off by default): a trader's (Haldor, Hildir, the Bog Witch) and other locations' map icons only for players who have found that place themselves; vanilla shows them to everyone the moment anyone's presence has generated the zone -- see below.
 - **Processor placement** (off by default): the server pinned to one chiplet of an AMD EPYC or Ryzen (a die with its own L3 cache), the least busy one at startup, or to processors you name, and a higher process priority.
 - **Safety:** a startup check warns when a vanilla method the mod replaces has changed in a game update; if the core patches cannot be applied, the mod removes itself and the server runs vanilla.
 
@@ -111,6 +112,8 @@ Clients need nothing.
 | `[GuardianStones] Enabled` | false | Show a boss's trophy on its guardian stone, and so offer its power, only to players who have beaten that boss themselves (see Guardian stones below). |
 | `[GuardianStones] ExemptAdmins` | true | Admins see every stone as it is. |
 | `[GuardianStones] Message` | (English text) | Shown to a player standing at a stone that holds a trophy they may not use, at most once a quarter of an hour per stone; `{0}` is the boss. Empty: no message. |
+| `[LocationIcons] Enabled` | false | Show a location's map icon (Haldor, Hildir, the Bog Witch, Hildir's dungeons, the Deep North boss room, the ancient upgrade station) only to players who have been near it themselves; remembered per character in `<world>.icons.txt`. The start temple's icon stays for everyone. |
+| `[LocationIcons] DiscoverRadius` | 50 | How near (metres, horizontally) a player must have been to a location for its icon to appear on their map. |
 | `[FireControl] Enabled` | false | Limit how far fire spreads (see Fire control below). With the three settings below at their defaults it changes nothing. |
 | `[FireControl] MaxRadius` | -1 | A fire starts only within this many metres (straight line) of the source its chain began at. -1: no limit. |
 | `[FireControl] MaxSpread` | -1 | Caps how many further generations of sparks any fire may set off. 0: nothing throws sparks except an arrow or fireball where it lands. -1: as in the game. |
@@ -172,6 +175,24 @@ A boss's power is taken at its guardian stone, wholly in the player's own game: 
 - A player standing at a stone they may not use is told why (`Message`), at most once a quarter of an hour per stone.
 - Fader leaves nothing of his own in the raid list; his stone counts as the Queen's.
 - Admins see every stone as it is (`ExemptAdmins`). A power a character took before this was switched on stays with it.
+
+## Location icons
+
+Some locations carry an icon for the map: the traders (Haldor, Hildir, the Bog Witch), Hildir's three
+dungeons, the Deep North boss room and the ancient upgrade station; the start temple's is always shown.
+Vanilla sends every player the icon of each of them as soon as the location is placed -- when its zone
+is generated, which happens whenever anyone passes within a few zones, usually without anyone seeing it
+-- and the map draws it whether the player has explored there or not (`ZoneSystem.SendLocationIcons`
+goes to everyone; `Minimap` checks no fog for it). So the first player to pass near Haldor's camp gives
+everyone his position.
+
+With `[LocationIcons] Enabled`, the server sends each player only the icons of the locations they have
+been within `DiscoverRadius` (50 m) of themselves, also from inside a dungeon above or below, and
+remembers them per character (`<world>.icons.txt`, one line per character and location). A player who
+finds one gets its icon within two seconds. Icons the game always shows stay for everyone, and players'
+own pins are not touched. Tested with two simulated players on a copy of the live world: far away both
+were sent only the start temple; the one taken to the ancient upgrade station got its icon too, the
+other did not; after a restart the first one got both icons at once.
 
 ## Fire control
 

@@ -58,6 +58,8 @@ namespace PluginConfiguration
 		public static ConfigEntry<bool> nightSpawnGuardEnabled;
 
 		public static ConfigEntry<bool> guardianStonesEnabled;
+		public static ConfigEntry<bool> locationIconsEnabled;
+		public static ConfigEntry<float> locationIconsDiscoverRadius;
 		public static ConfigEntry<bool> guardianStonesExemptAdmins;
 		public static ConfigEntry<string> guardianStonesMessage;
 
@@ -169,6 +171,11 @@ namespace PluginConfiguration
 
 			nightSpawnGuardEnabled = config.Bind<bool>("NightSpawnGuard", "Enabled", false,
 				"Hold back the ambient spawns that come with boss progress (Greydwarfs at night after Eikthyr, Draugr and Greydwarf Elites and Shamans after the Elder, Skeletons after Bonemass, Goblins after Yagluth, Seekers and Ticks after the Queen, Charred after Fader) around a group of players until every player in that spawn zone has got that far themselves, as their own client's raid list shows it. Until then the zone behaves as if the boss were still alive. In a group the least progressed player decides. Raids are not affected (-setkey playerevents decides those per player).");
+
+			locationIconsEnabled = config.Bind<bool>("LocationIcons", "Enabled", false,
+				"Show a location's map icon (the traders Haldor, Hildir and the Bog Witch, Hildir's dungeons, the Deep North boss room, the ancient upgrade station) only to players who have been near it themselves. Vanilla sends every player the icon as soon as anyone's presence has generated the location's zone, and the map shows it whether the player has explored there or not. Found icons are remembered per character in <world>.icons.txt. The start temple's icon stays for everyone.");
+			locationIconsDiscoverRadius = config.Bind<float>("LocationIcons", "DiscoverRadius", 50f,
+				"How near (metres, horizontally) a player must have been to a location for its icon to appear on their map.");
 
 			guardianStonesEnabled = config.Bind<bool>("GuardianStones", "Enabled", false,
 				"Show a boss's trophy on its guardian stone, and so offer its power, only to players who have beaten that boss themselves, as their own client's raid list shows it (the same reading as the night spawn guard). To everyone else's game the stone is empty: a vanilla client cannot take a power it cannot see, and the server could not take one back. Players who may not use a stone cannot hang a trophy on it either.");

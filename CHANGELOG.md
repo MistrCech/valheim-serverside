@@ -1,3 +1,17 @@
+## [1.16.0] - 2026-10-10
+
+### Added
+
+- `[LocationIcons]` (off by default): a location's map icon -- Haldor, Hildir, the Bog Witch, Hildir's
+  dungeons, the Deep North boss room, the ancient upgrade station -- only for players who have been
+  within `DiscoverRadius` (50 m) of it themselves. Vanilla sends every player every such icon as soon as
+  the location is placed, which happens when anyone passes within a few zones of it, and the map shows
+  it whatever the player has explored: the first player near Haldor's camp gives everyone his position.
+  `ZoneSystem.SendLocationIcons` is replaced by a per-player version (also when a player joins and when
+  a location is placed); found icons are remembered per character in `<world>.icons.txt` and sent within
+  two seconds of finding one. The start temple's icon (always shown by the game) stays for everyone.
+  Tested with two simulated players on a copy of the live world, including a restart.
+
 ## [1.15.0] - 2026-10-09
 
 ### Added
