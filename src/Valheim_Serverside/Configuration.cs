@@ -58,6 +58,9 @@ namespace PluginConfiguration
 		public static ConfigEntry<bool> nightSpawnGuardEnabled;
 
 		public static ConfigEntry<bool> guardianStonesEnabled;
+		public static ConfigEntry<bool> welcomeEnabled;
+		public static ConfigEntry<string> welcomeTitle;
+		public static ConfigEntry<string> welcomeLines;
 		public static ConfigEntry<bool> locationIconsEnabled;
 		public static ConfigEntry<float> locationIconsDiscoverRadius;
 		public static ConfigEntry<bool> guardianStonesExemptAdmins;
@@ -172,6 +175,13 @@ namespace PluginConfiguration
 			nightSpawnGuardEnabled = config.Bind<bool>("NightSpawnGuard", "Enabled", false,
 				"Hold back the ambient spawns that come with boss progress (Greydwarfs at night after Eikthyr, Draugr and Greydwarf Elites and Shamans after the Elder, Skeletons after Bonemass, Goblins after Yagluth, Seekers and Ticks after the Queen, Charred after Fader) around a group of players until every player in that spawn zone has got that far themselves, as their own client's raid list shows it. Until then the zone behaves as if the boss were still alive. In a group the least progressed player decides. Raids are not affected (-setkey playerevents decides those per player).");
 
+			welcomeEnabled = config.Bind<bool>("CharacterGuard", "Welcome", false,
+				"Greet a character the first time it joins this world: WelcomeTitle in the middle of the screen, then each of WelcomeLines in the top left corner. A vanilla client shows it; nothing to install.");
+			welcomeTitle = config.Bind<string>("CharacterGuard", "WelcomeTitle", "Welcome to Sarkastic.gg",
+				"Shown in the middle of the screen a few seconds after a new character is let in. Empty = none.");
+			welcomeLines = config.Bind<string>("CharacterGuard", "WelcomeLines",
+				"Build a workbench to keep your area as it is: without one, a zone grows back as new after 72 h with nobody near.|A zone growing back never removes your buildings, chests or portals.|Fire spreads only from fire arrows, staffs, meteors and lava.|More at sarkastic.gg",
+				"Shown one after another in the top left corner after WelcomeTitle. Separated by |.");
 			locationIconsEnabled = config.Bind<bool>("LocationIcons", "Enabled", false,
 				"Show a location's map icon (the traders Haldor, Hildir and the Bog Witch, Hildir's dungeons, the Deep North boss room, the ancient upgrade station) only to players who have been near it themselves. Vanilla sends every player the icon as soon as anyone's presence has generated the location's zone, and the map shows it whether the player has explored there or not. Found icons are remembered per character in <world>.icons.txt. The start temple's icon stays for everyone.");
 			locationIconsDiscoverRadius = config.Bind<float>("LocationIcons", "DiscoverRadius", 50f,

@@ -101,6 +101,8 @@ Clients need nothing.
 | `[CharacterGuard] ChangedAway` | Log | For a known character that comes back wearing something new or with other progress: `Log`, `Kick` or `Ignore`. |
 | `[CharacterGuard] ExemptAdmins` | true | Admins are never checked. |
 | `[CharacterGuard] NewCharacterMessage` / `ChangedAwayMessage` | (English text) | Shown in the middle of the player's screen before the kick. |
+| `[CharacterGuard] Welcome` | false | Greet a character the first time it joins this world. |
+| `[CharacterGuard] WelcomeTitle` / `WelcomeLines` | (English text) | The greeting in the middle of the screen, then the lines (separated by `\|`) in the top left corner. |
 | `[ItemLedger] Mode` | Off | `Off`, `LogOnly` or `On`: keep item accounts per character (see Item ledger below); `On` also takes away items that came from another world. |
 | `[ItemLedger] Items` | auto | `auto`: the items that lock progress, from the game's own data (see below). Or item prefab names, comma separated. Items traders sell are always left out. |
 | `[ItemLedger] ExtraItems` / `ExcludeItems` | (empty) | Item prefab names to add to the list, or never to keep accounts of. |
@@ -126,7 +128,8 @@ Clients need nothing.
 Valheim keeps a character on the player's own computer and a vanilla client never sends its inventory to the server, so no server-side mod can read or replace what a character carries. The server does see a character's id (the same on every world), what it wears and holds (both hands, back slots, armour, utility, trinket, with the upgrade level of weapons), and the raids it is ready for, which the game works out from the items the character knows and the bosses it has beaten. The guard uses that:
 
 - **New characters** -- not in this world's list and without anything built, a bed or a tombstone here -- must be fresh: still ready for Eikthyr's raid (the game stops that once a character knows the antler, bronze or iron pickaxe, hard antler or Eikthyr's trophy) and wearing nothing beyond what a level 1 workbench makes. A character brought in with progress from another world gets a message and is kicked 8 seconds later (`NewCharacterAction`).
-- **Known characters** that come back wearing something they did not have when last seen here, or ready for other raids than then, were played somewhere else in between; that is logged (`ChangedAway`, or kicked). What an online character wears and knows is noted every minute as well as when it leaves, since a server shutdown does not disconnect the players one by one.
+- **Known characters** that come back wearing something past a level 1 workbench they did not have when last seen here, or ready for other raids than then, were played somewhere else in between; that is logged (`ChangedAway`, or kicked). A club or rags are made anywhere in minutes and tell nothing. What an online character wears and knows is noted every minute, at every world save and at shutdown, as well as when it leaves, since a server shutdown does not disconnect the players one by one.
+- **Welcome** (`Welcome`, off by default): a character let in for the first time gets `WelcomeTitle` in the middle of the screen and then each of `WelcomeLines` in the top left corner, a few seconds after joining. A kicked character gets its kick message instead.
 - Characters that built something or own a bed or a tombstone in the world count as known, so switching this on does not lock out existing players. Admins are exempt.
 - `characters` on the console shows how the guard sees who is online; `allow <name>` lets a character in (and one that is waiting for its kick stay). The list is `<world>.characters.txt` next to the world save.
 

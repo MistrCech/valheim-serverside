@@ -28,8 +28,10 @@ namespace Valheim_Serverside.Features
 		- a character this world has not seen before must be fresh: still ready for Eikthyr's raid
 		  (it knows none of the Eikthyr-tier items) and wearing nothing beyond what a level 1 workbench
 		  makes. A character brought in with progress from another world is kicked, or only logged.
-		- a known character that comes back wearing something new, or with other progress than it had
-		  when it left, played somewhere else in between; that is logged, or kicked.
+		- a known character that comes back wearing something new past a level 1 workbench, or with other
+		  progress than it had when it left, played somewhere else in between; that is logged, or kicked.
+		  What it wears is noted every minute, at every save and at shutdown, so a restart is not a leave
+		  the guard misses.
 
 		"Known" is every character in this world's list, plus -- so that switching this on does not lock
 		anyone out -- every character that has built something or owns a bed or a tombstone here. An
@@ -69,6 +71,7 @@ namespace Valheim_Serverside.Features
 			public long id;
 			public float kickAt = -1f;
 			public bool kicked;
+			public float welcomeAt = -1f;
 		}
 
 		private static readonly Dictionary<long, Record> s_records = new Dictionary<long, Record>();
@@ -90,6 +93,8 @@ namespace Valheim_Serverside.Features
 		private const float SettleSeconds = 3f;
 		private const float EventsWaitSeconds = 20f;
 		private const float KickDelaySeconds = 8f;
+		// After a new character is let in: its HUD is up by then and the guard's own decision is done.
+		private const float WelcomeDelaySeconds = 6f;
 		// How often what an online character wears and knows is taken as the reference for its return: a server
 		// shutdown never calls ZNet.Disconnect, so the leave itself is not always seen.
 		private const float SnapshotSeconds = 60f;
@@ -192,6 +197,11 @@ namespace Valheim_Serverside.Features
 					{
 						TryDecide(peer, session);
 					}
+					if (session.welcomeAt >= 0f && Time.time >= session.welcomeAt)
+					{
+						session.welcomeAt = -1f;
+						Welcome(peer);
+					}
 				}
 				catch (Exception e)
 				{
@@ -204,23 +214,29 @@ namespace Valheim_Serverside.Features
 			}
 			if (Time.time >= s_nextSnapshot)
 			{
-				s_nextSnapshot = Time.time + SnapshotSeconds;
-				bool changed = false;
-				foreach (KeyValuePair<ZNetPeer, Session> kv in s_sessions)
+				SnapshotAll();
+			}
+		}
+
+		// Every online character's reference for its return, written down if it changed.
+		private static void SnapshotAll()
+		{
+			s_nextSnapshot = Time.time + SnapshotSeconds;
+			bool changed = false;
+			foreach (KeyValuePair<ZNetPeer, Session> kv in s_sessions)
+			{
+				try
 				{
-					try
-					{
-						changed |= Snapshot(kv.Key, kv.Value);
-					}
-					catch (Exception e)
-					{
-						Warn($"could not note what {kv.Key.m_playerName} wears", e);
-					}
+					changed |= Snapshot(kv.Key, kv.Value);
 				}
-				if (changed)
+				catch (Exception e)
 				{
-					Save();
+					Warn($"could not note what {kv.Key.m_playerName} wears", e);
 				}
+			}
+			if (changed)
+			{
+				Save();
 			}
 		}
 
@@ -323,6 +339,7 @@ namespace Valheim_Serverside.Features
 			if (reasons.Count == 0 || Configuration.characterGuardNewCharacters.Value == NewCharacterPolicy.Allow)
 			{
 				Remember(id, name, account, reasons.Count == 0 ? "new and fresh" : "new, allowed with progress", now);
+				ScheduleWelcome(session);
 				if (reasons.Count > 0)
 				{
 					ServersidePlugin.logger.LogInfo($"Character guard: new character {name} ({account}) let in with progress: {string.Join("; ", reasons)}");
@@ -339,8 +356,32 @@ namespace Valheim_Serverside.Features
 			{
 				// Logged once; from now on it is a known character.
 				Remember(id, name, account, "new with progress, only logged", now);
+				ScheduleWelcome(session);
 			}
 			Act(peer, session, action, what, Configuration.characterGuardNewMessage.Value);
+		}
+
+		private static void ScheduleWelcome(Session session)
+		{
+			if (Configuration.welcomeEnabled.Value)
+			{
+				session.welcomeAt = Time.time + WelcomeDelaySeconds;
+			}
+		}
+
+		// The greeting for a character new to this world; a kicked one gets its kick message instead.
+		private static void Welcome(ZNetPeer peer)
+		{
+			string title = Configuration.welcomeTitle.Value;
+			if (!string.IsNullOrWhiteSpace(title))
+			{
+				ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage", (int)MessageHud.MessageType.Center, title.Trim());
+			}
+			foreach (string line in (Configuration.welcomeLines.Value ?? "").Split('|').Select(l => l.Trim()).Where(l => l.Length > 0))
+			{
+				ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage", (int)MessageHud.MessageType.TopLeft, line);
+			}
+			ServersidePlugin.logger.LogInfo($"Character guard: welcomed {peer.m_playerName}");
 		}
 
 		private static void Act(ZNetPeer peer, Session session, Action action, string what, string message)
@@ -397,7 +438,8 @@ namespace Valheim_Serverside.Features
 			List<string> changes = new List<string>();
 			if (known.wearing != null)
 			{
-				List<string> added = wearing.Except(known.wearing).ToList();
+				// Only gear past a level 1 workbench tells of play elsewhere: a club or rags are made anywhere in minutes.
+				List<string> added = wearing.Except(known.wearing).Where(IsAdvanced).ToList();
 				if (added.Count > 0)
 				{
 					changes.Add("now wears " + string.Join(", ", added));
@@ -681,6 +723,43 @@ namespace Valheim_Serverside.Features
 			}
 			return $"{s_records.Count} known character(s) in {Path.GetFileName(s_path)}. Online: {(parts.Count > 0 ? string.Join("; ", parts) : "nobody")}"
 				+ (s_rejected.Count > 0 ? $". Turned away: {string.Join(", ", s_rejected.Keys)}" : "");
+		}
+
+		// A restart is a save and then a stop that never calls Disconnect: note what everyone wears at every save
+		// and at shutdown, so a change in the last minute before it is not taken for play elsewhere.
+		[HarmonyPatch(typeof(ZNet), nameof(ZNet.Save))]
+		public static class ZNet_Save_Patch
+		{
+			static void Prefix()
+			{
+				SnapshotOnServer("save");
+			}
+		}
+
+		[HarmonyPatch(typeof(ZNet), nameof(ZNet.Shutdown))]
+		public static class ZNet_Shutdown_Patch
+		{
+			static void Prefix()
+			{
+				SnapshotOnServer("shutdown");
+			}
+		}
+
+		private static void SnapshotOnServer(string when)
+		{
+			try
+			{
+				if (!Configuration.characterGuardEnabled.Value || s_path == null || !ZNet.instance || !ZNet.instance.IsServer()
+					|| ZDOMan.instance == null || !ObjectDB.instance || !RandEventSystem.instance)
+				{
+					return;
+				}
+				SnapshotAll();
+			}
+			catch (Exception e)
+			{
+				Warn($"could not note what everyone wears at {when}", e);
+			}
 		}
 
 		[HarmonyPatch(typeof(ZNet), "Disconnect")]

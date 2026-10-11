@@ -1,3 +1,22 @@
+## [1.17.0] - 2026-10-11
+
+### Added
+
+- `[CharacterGuard] Welcome` (off by default), `WelcomeTitle`, `WelcomeLines`: a character let in for
+  the first time is greeted a few seconds after joining -- the title in the middle of the screen, then
+  each line in the top left corner (the vanilla `ShowMessage` RPC, nothing to install). A kicked
+  character gets its kick message instead.
+
+### Fixed
+
+- `[CharacterGuard] ChangedAway` flagged a new player who picked up a club in the minute before a
+  restart (live, 10. 10.): what a character wears was noted every minute and when it left, but a server
+  shutdown never disconnects anyone, so a change in the last minute looked like play elsewhere. It is now
+  noted at every world save and at shutdown too, and only gear past a level 1 workbench counts as a
+  change -- a club or rags are made anywhere in minutes. Tested on a copy of the world with four
+  simulated players, against 1.16.0 as the control: a bronze sword put on 5 s before quitting and a
+  club are no longer flagged (1.16.0 flagged both), an iron sword never worn here still is.
+
 ## [1.16.0] - 2026-10-10
 
 ### Added
