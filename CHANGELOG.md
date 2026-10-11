@@ -1,3 +1,26 @@
+## [1.18.0] - 2026-10-11
+
+### Added
+
+- `[PortalLock]` (off by default): a pair of portals is used only by those it belongs to. Valheim
+  pairs portals by name alone and a connected portal teleports whoever steps into it, so a portal built
+  with the name of someone's unpaired one walks into that base. Now the builders may use the pair, and
+  where a ward holds an end (covers it and has the builder on its list) the owner and the players on that
+  list instead -- one ward at one end decides for the pair, the far end included; wards at both ends: a
+  player has to be on both lists. A name starting with `PublicPrefix` (`*`) is open to everyone. A player
+  who may not use a pair is sent the portal unconnected (the connection is left out of that one copy;
+  nothing is changed on the server); two portals of one name are paired only if both builders may use the
+  pair (without a ward: the same player built both); a name is changed only by those who may use the pair;
+  pairs that exist are not touched (usable by both builders where no ward holds either end). A ward holds
+  an end only with the portal's builder on its list, so a ward put up over someone's portal afterwards
+  takes nothing. Messages at the portal tell the player why. Tested on a copy of the world with four
+  simulated players: the same scenario with the lock off shows vanilla (every player is sent every pair,
+  a stranger renames a portal and takes it over, portals with nobody in common pair), with it on only the
+  intended players get each pair, a stranger's rename and forged data are refused, a name written on a
+  ward's list and taken off it again reach the players within seconds. The ward's radius is the game's
+  own, 32 m for `guard_stone`. On a copy of the live world (11. 10.) there are 4 portals, one pair, all
+  built by one player: nothing that exists changes.
+
 ## [1.17.0] - 2026-10-11
 
 ### Added

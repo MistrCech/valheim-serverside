@@ -52,6 +52,7 @@ Compared to Serverside Simulations 1.1.9 (details in the [changelog](CHANGELOG.m
 - **Night spawn guard** (off by default): the spawns that come with boss progress (Greydwarfs, Draugr, Skeletons, Goblins, Seekers, Charred, ...) held back around a player who has not got that far themselves, even where the world as a whole has moved past it -- see below.
 - **Guardian stones** (off by default): a boss's trophy on its guardian stone, and so its power, only for players who have beaten that boss themselves; to everyone else's game the stone is empty -- see below.
 - **Fire control** (off by default): a limit in metres on how far fire spreads from its source, a cap on spark generations, fireplaces that never set what touches them alight, or fire from projectiles only, so a player's own build never sets it on fire -- with the reach of every fire source in the game worked out, and every fire and fireplace simulated by the server so the rules hold -- see below.
+- **Portal lock** (off by default): a pair of portals used only by those it belongs to -- the builders, or the owner and the players on the ward over it; a name starting with `*` is open to everyone. Two portals are paired only if both builders may use the pair, so a portal built with the name of someone's unpaired one no longer walks anyone into their base -- see below.
 - **Location icons** (off by default): a trader's (Haldor, Hildir, the Bog Witch) and other locations' map icons only for players who have found that place themselves; vanilla shows them to everyone the moment anyone's presence has generated the zone -- see below.
 - **Processor placement** (off by default): the server pinned to one chiplet of an AMD EPYC or Ryzen (a die with its own L3 cache), the least busy one at startup, or to processors you name, and a higher process priority.
 - **Safety:** a startup check warns when a vanilla method the mod replaces has changed in a game update; if the core patches cannot be applied, the mod removes itself and the server runs vanilla.
@@ -114,6 +115,11 @@ Clients need nothing.
 | `[GuardianStones] Enabled` | false | Show a boss's trophy on its guardian stone, and so offer its power, only to players who have beaten that boss themselves (see Guardian stones below). |
 | `[GuardianStones] ExemptAdmins` | true | Admins see every stone as it is. |
 | `[GuardianStones] Message` | (English text) | Shown to a player standing at a stone that holds a trophy they may not use, at most once a quarter of an hour per stone; `{0}` is the boss. Empty: no message. |
+| `[PortalLock] Enabled` | false | Let a pair of portals be used only by those it belongs to (see Portal lock below). |
+| `[PortalLock] ExemptAdmins` | true | Admins may use and rename every portal. |
+| `[PortalLock] PublicPrefix` | `*` | A portal whose name starts with this is open to everyone. Empty: none. |
+| `[PortalLock] ExtraReach` | 0 | Metres added to a ward's own radius (32 m for the game's ward) when deciding whether it covers a portal. |
+| `[PortalLock] Message` / `PairingMessage` | (English text) | Shown at a portal a player may not use, and to the builder of one that cannot be paired, at most once a quarter of an hour per portal. |
 | `[LocationIcons] Enabled` | false | Show a location's map icon (Haldor, Hildir, the Bog Witch, Hildir's dungeons, the Deep North boss room, the ancient upgrade station) only to players who have been near it themselves; remembered per character in `<world>.icons.txt`. The start temple's icon stays for everyone. |
 | `[LocationIcons] DiscoverRadius` | 50 | How near (metres, horizontally) a player must have been to a location for its icon to appear on their map. |
 | `[FireControl] Enabled` | false | Limit how far fire spreads (see Fire control below). With the three settings below at their defaults it changes nothing. |
@@ -178,6 +184,26 @@ A boss's power is taken at its guardian stone, wholly in the player's own game: 
 - A player standing at a stone they may not use is told why (`Message`), at most once a quarter of an hour per stone.
 - Fader leaves nothing of his own in the raid list; his stone counts as the Queen's.
 - Admins see every stone as it is (`ExemptAdmins`). A power a character took before this was switched on stays with it.
+
+## Portal lock
+
+Valheim pairs portals by their name alone: any two unconnected portals with the same name are connected (`Game.ConnectPortals`, on the server, every five seconds), and a player who steps into a connected portal is teleported by their own game, which the server cannot stop. So anyone who builds a portal with the name of someone's unpaired one walks into that base -- an untagged portal pairs with any other untagged one -- and anyone who finds a paired portal can use it. What the server does decide is what each player's game is told about a portal, and the lock uses that.
+
+A pair of portals is one thing, and the same player may use both ends (one let through one end must be able to come back through the other):
+
+- **Where a ward holds an end** -- the ward (`PrivateArea`) covers it in its own radius (32 m for the game's ward, the circle seen around it; `ExtraReach` widens it) and has the portal's builder on its list -- the owner and the players on that list may use the pair. One ward at one end decides for the pair, the far end included, wherever it stands; with a ward at both ends a player has to be on both lists. The ward's own list is used (its owner presses E on it, as before) and it counts whether the ward is switched on or off, so adding a friend never opens the portals. A ward put up over someone's portal later, which does not have its builder on its list, holds nothing.
+- **Where no ward holds either end**, the builders of the two ends.
+- **Everyone**, if the name starts with `PublicPrefix` (`*`) at both ends; inside someone else's ward only if that ward's owner built the portal. A name can still only be changed by those who may use the pair otherwise.
+- **Admins** (`ExemptAdmins`). A portal nobody has built (spawned by an admin, no ward) stays open.
+
+How it is kept:
+
+- A player who may not use a pair is sent the portal's data with the connection set to "none" (`ZDOMan.SendZDOs`), and put back right after: to their game the portal is unconnected and does not teleport. Nothing is saved or changed on the server. A client only takes data newer than its copy, so when who may use a pair changes -- a name on a ward, a portal built, a ward moved -- the portal's data revision is raised once and the right copy goes out to everyone within a couple of seconds.
+- Pairing: two unconnected portals of one name are connected only if both builders may use the pair -- with a ward holding an end, each builder is on its list; with none, the same player built both. Two names alike are no consent. Otherwise they stay unconnected and the builder, standing at the portal, is told why. Pairs that exist are not touched, and where no ward holds either end they stay usable by the builders of both; where a ward holds an end, its list decides who may use the pair from then on, so a builder who was never written on it asks the ward's owner (the player is told at the portal).
+- A portal's name can be changed only by those who may use the pair (not by everyone just because it is public). The request is not passed on to the game that owns the portal, data from anyone else is not taken, and a player who may not use a portal is never given it.
+- Everything the game's own wards already do stays: a portal can be taken apart by whoever may take apart pieces in that ward, and nobody else in a ward's area.
+
+What it does not do: it cannot stop a game that has been modified, and it does not hide where a portal stands. A player's character is what counts, not the account: a second character is another player.
 
 ## Location icons
 

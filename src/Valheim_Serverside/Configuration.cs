@@ -57,6 +57,12 @@ namespace PluginConfiguration
 
 		public static ConfigEntry<bool> nightSpawnGuardEnabled;
 
+		public static ConfigEntry<bool> portalLockEnabled;
+		public static ConfigEntry<bool> portalLockExemptAdmins;
+		public static ConfigEntry<string> portalLockPublicPrefix;
+		public static ConfigEntry<float> portalLockExtraReach;
+		public static ConfigEntry<string> portalLockMessage;
+		public static ConfigEntry<string> portalLockPairingMessage;
 		public static ConfigEntry<bool> guardianStonesEnabled;
 		public static ConfigEntry<bool> welcomeEnabled;
 		public static ConfigEntry<string> welcomeTitle;
@@ -186,6 +192,19 @@ namespace PluginConfiguration
 				"Show a location's map icon (the traders Haldor, Hildir and the Bog Witch, Hildir's dungeons, the Deep North boss room, the ancient upgrade station) only to players who have been near it themselves. Vanilla sends every player the icon as soon as anyone's presence has generated the location's zone, and the map shows it whether the player has explored there or not. Found icons are remembered per character in <world>.icons.txt. The start temple's icon stays for everyone.");
 			locationIconsDiscoverRadius = config.Bind<float>("LocationIcons", "DiscoverRadius", 50f,
 				"How near (metres, horizontally) a player must have been to a location for its icon to appear on their map.");
+
+			portalLockEnabled = config.Bind<bool>("PortalLock", "Enabled", false,
+				"Let a portal be used only by those it belongs to. The server pairs portals by name alone, so anyone who builds a portal with the name of an unpaired one walks into that base; and nothing stops a player from stepping into any paired portal. Here a pair of portals is one thing: it may be used by the builder of either end, and by the owner and the players written on a ward that covers either end (one ward at one end decides for the pair; wards at both ends: a player has to be on both lists). A name that starts with PublicPrefix is open to everyone. Two portals are paired only if they have a person in common. A player who may not use a pair sees the portal unconnected. The ward's own list is used: its owner presses E on it as before. Existing pairs keep working for the builders of both ends. See the README.");
+			portalLockExemptAdmins = config.Bind<bool>("PortalLock", "ExemptAdmins", true,
+				"Admins (adminlist.txt) may use and rename every portal.");
+			portalLockPublicPrefix = config.Bind<string>("PortalLock", "PublicPrefix", "*",
+				"A portal whose name starts with this is open to everyone, as in the game: at a spawn crossroads, say. Inside someone else's ward it counts only if the ward's owner built it. Its name can still only be changed by those who manage it. Empty: no public portals.");
+			portalLockExtraReach = config.Bind<float>("PortalLock", "ExtraReach", 0f,
+				"Metres added to a ward's own radius (32 m for the game's ward, the circle seen around it) for deciding whether it covers a portal.");
+			portalLockMessage = config.Bind<string>("PortalLock", "Message", "This portal is private. Ask its owner to add you to the ward next to it.",
+				"Shown in the middle of the screen of a player who stands at a portal they may not use, or tries to rename one, at most once a quarter of an hour per portal. Empty: no message.");
+			portalLockPairingMessage = config.Bind<string>("PortalLock", "PairingMessage", "No portal of this name can be linked to yours: its builder has to be on a ward next to your portal, or you on one next to theirs.",
+				"Shown to the builder standing at an unconnected portal that has a partner of the same name it may not be paired with, at most once a quarter of an hour per portal. Empty: no message.");
 
 			guardianStonesEnabled = config.Bind<bool>("GuardianStones", "Enabled", false,
 				"Show a boss's trophy on its guardian stone, and so offer its power, only to players who have beaten that boss themselves, as their own client's raid list shows it (the same reading as the night spawn guard). To everyone else's game the stone is empty: a vanilla client cannot take a power it cannot see, and the server could not take one back. Players who may not use a stone cannot hang a trophy on it either.");
