@@ -4,6 +4,8 @@
 
 The dedicated server simulates the world — monsters, physics, ships without a driver — instead of handing each area to whichever player got there first. **Server-side only: players keep vanilla clients.**
 
+Companion plugin: [Resource Regrowth](https://github.com/MistrCech/valheim-resource-regrowth) ([Thunderstore](https://thunderstore.io/c/valheim/p/Sarkastic_gg/Resource_Regrowth/)) brings back surtling cores, chest loot, creatures and whole zones in areas left alone; the two are made to run together.
+
 Updated for Valheim **1.0.16**. Up to version 1.12 it was also checked on 1.0.15 and 1.0.12; what was added after that is tested on 1.0.16 only. A startup check warns about every vanilla method the mod uses that a game update has changed.
 
 ## Why, compared to vanilla
@@ -286,6 +288,13 @@ If your mod changes the simulation or behaviour of the world, it has to be able 
 - `Player.m_localPlayer` is always `null` on a dedicated server; check for it.
 - On a dedicated server, `ZNet.instance.GetReferencePosition()` returns a position outside of the world, unrelated to any player.
 - Graphics or HUD code should be behind a `ZNet.instance.IsDedicated()` check if it can run on the server.
+
+## Credits
+
+- **Serverside Simulations** by ddormer and its contributors: this is a fork, and the simulation itself -- the zones around players loaded and simulated on the server, the configuration and the feature framework -- is their work. The original is at [ddormer/valheim-serverside](https://github.com/ddormer/valheim-serverside) and on Thunderstore as `mvp/Serverside_Simulations`.
+- **@mreastman**: the port to Valheim 1.0 ([ddormer/valheim-serverside#118](https://github.com/ddormer/valheim-serverside/pull/118)) this fork builds on.
+- **@Merl**: found why the frame rate patch broke on Valheim 1.0.14 ([#1](https://github.com/MistrCech/valheim-serverside/pull/1)); the refresh rate idea is in 1.11.0.
+- **BetterNetworking**: the server-side network limits are its idea.
 
 ## Building
 

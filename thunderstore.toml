@@ -9,7 +9,7 @@ schemaVersion = "0.0.1"
 namespace = "Sarkastic_gg"
 name = "Dedicated_Simulation"
 versionNumber = "1.18.0"
-description = "Server-side BepInEx plugin for Valheim dedicated servers: the server simulates the world itself. Character guard, item ledger, portal lock, fire control, location icons, network limits. Fork of Serverside Simulations; clients stay vanilla."
+description = "Server-side BepInEx plugin for Valheim dedicated servers: the server simulates the world itself. Character guard, item ledger, portal lock, fire control, location icons, network limits. Fork of Serverside Simulations by ddormer; clients stay vanilla."
 websiteUrl = "https://github.com/MistrCech/valheim-serverside"
 containsNsfwContent = false
 
