@@ -1,3 +1,11 @@
+## [1.18.1] - 2026-10-12
+
+### Changed
+
+- Thunderstore package only (`Sarkastic_gg/Dedicated_Simulation`): an icon of its own, and the README's credits
+  and companion plugin. The plugin is the 1.18.0 DLL, unchanged; a package's icon can only change with a new
+  version number.
+
 ## [1.18.0] - 2026-10-11
 
 ### Added

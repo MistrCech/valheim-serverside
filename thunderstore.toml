@@ -1,14 +1,14 @@
 # Thunderstore package of this plugin, built and published with `tcli` (github.com/thunderstore-io/thunderstore-cli):
 #   tcli build                          builds dist/Sarkastic_gg-Dedicated_Simulation-<version>.zip
 #   tcli publish --token <token>        uploads it (the token is a service account token of the team)
-# The version is the one in ServersidePlugin.cs; change both together.
+# The version is the plugin's (ServersidePlugin.cs); a package-only change (the icon) takes the next patch number.
 [config]
 schemaVersion = "0.0.1"
 
 [package]
 namespace = "Sarkastic_gg"
 name = "Dedicated_Simulation"
-versionNumber = "1.18.0"
+versionNumber = "1.18.1"
 description = "Server-side BepInEx plugin for Valheim dedicated servers: the server simulates the world itself. Character guard, item ledger, portal lock, fire control, location icons, network limits. Fork of Serverside Simulations by ddormer; clients stay vanilla."
 websiteUrl = "https://github.com/MistrCech/valheim-serverside"
 containsNsfwContent = false
