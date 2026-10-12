@@ -4,7 +4,7 @@
 
 The dedicated server simulates the world — monsters, physics, ships without a driver — instead of handing each area to whichever player got there first. **Server-side only: players keep vanilla clients.**
 
-Updated for Valheim **1.0.15**; also runs on 1.0.12.
+Updated for Valheim **1.0.16**. Up to version 1.12 it was also checked on 1.0.15 and 1.0.12; what was added after that is tested on 1.0.16 only. A startup check warns about every vanilla method the mod uses that a game update has changed.
 
 ## Why, compared to vanilla
 
@@ -76,7 +76,9 @@ Clients need nothing.
 | Setting | Default | |
 |---|---|---|
 | `[General] Enabled` | true | Turn the mod off without removing it. |
+| `[MaxObjectsPerFrame] Enabled` | true | Turn the object creation limit off (vanilla's 100 per frame stays). |
 | `[MaxObjectsPerFrame] MaxObjects` | 100 | Objects the server creates per frame, 1 to 10000. A vanilla dedicated server creates 100; higher loads areas faster at more CPU, lower fills them in more slowly. |
+| `[Networking] Enabled` | true | Raise the limits on how fast the server sends world data to each player (the server side of BetterNetworking). Needs a restart. |
 | `[Networking] QueueSizeKB` | 48 | Data queued per player before the server holds world updates for that tick (Valheim: 10). 48 KB at 20 ticks/s is about 960 KB/s, just under the send rate cap; above 80 Steam starts failing. |
 | `[Networking] SteamSendRateMinKB` / `MaxKB` | 256 / 1024 | Steam send rate per player, KB/s (Valheim: 150). Keep min × players below the server's upload. |
 | `[Networking] StatsIntervalMinutes` | 5 | How often to log, per player, how often the send queue was full. Near 0% means the limits are not what holds you back. 0 disables. |
@@ -101,6 +103,7 @@ Clients need nothing.
 | `[CharacterGuard] NewCharacterAction` | Kick | For a new character that is not fresh: `Kick` (after a message on their screen), `Log` or `Ignore`. |
 | `[CharacterGuard] ChangedAway` | Log | For a known character that comes back wearing something new or with other progress: `Log`, `Kick` or `Ignore`. |
 | `[CharacterGuard] ExemptAdmins` | true | Admins are never checked. |
+| `[CharacterGuard] FreshEvent` | `army_eikthyr` | The raid a fresh character is still ready for. The game stops that once a character knows the antler, the bronze or iron pickaxe, hard antler or Eikthyr's trophy. |
 | `[CharacterGuard] NewCharacterMessage` / `ChangedAwayMessage` | (English text) | Shown in the middle of the player's screen before the kick. |
 | `[CharacterGuard] Welcome` | false | Greet a character the first time it joins this world. |
 | `[CharacterGuard] WelcomeTitle` / `WelcomeLines` | (English text) | The greeting in the middle of the screen, then the lines (separated by `\|`) in the top left corner. |
