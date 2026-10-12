@@ -1,3 +1,12 @@
+## [1.18.3] - 2026-10-12
+
+### Changed
+
+- Thunderstore package only (`Sarkastic_gg/Dedicated_Simulation`): `LICENSE` (MIT, for the work of MistrCech /
+  Sarkastic.gg) and `NOTICE.md` (what it does not cover: the parts that come from Serverside Simulations, which has
+  no licence, and third-party components) are in the repository and in the package; the README says so. The
+  plugin is the 1.18.0 DLL, unchanged.
+
 ## [1.18.2] - 2026-10-12
 
 ### Changed

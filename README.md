@@ -1,6 +1,6 @@
 # Sarkastic.gg Dedicated Simulation
 
-![version: 1.18.2](https://img.shields.io/badge/version-1.18.2-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.16](https://img.shields.io/badge/Valheim-1.0.16-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)
+![version: 1.18.3](https://img.shields.io/badge/version-1.18.3-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.16](https://img.shields.io/badge/Valheim-1.0.16-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)  ![license: MIT (own code)](https://img.shields.io/badge/license-MIT%20%28own%20code%29-5b5f66?style=flat-square)
 
 [Source code](https://github.com/MistrCech/valheim-serverside)  ·  [Report a bug](https://github.com/MistrCech/valheim-serverside/issues/new)  ·  [Changelog](https://github.com/MistrCech/valheim-serverside/blob/main/CHANGELOG.md)  ·  [Resource Regrowth](https://thunderstore.io/c/valheim/p/Sarkastic_gg/Resource_Regrowth/)
 
@@ -301,6 +301,10 @@ If your mod changes the simulation or behaviour of the world, it has to be able 
 - **@mreastman**: the port to Valheim 1.0 ([ddormer/valheim-serverside#118](https://github.com/ddormer/valheim-serverside/pull/118)) this fork builds on.
 - **@Merl**: found why the frame rate patch broke on Valheim 1.0.14 ([#1](https://github.com/MistrCech/valheim-serverside/pull/1)); the refresh rate idea is in 1.11.0.
 - **BetterNetworking**: the server-side network limits are its idea.
+
+## License
+
+Our own work is MIT, see [LICENSE](https://github.com/MistrCech/valheim-serverside/blob/main/LICENSE). A few files carry code from Serverside Simulations by ddormer, which has no licence; that code is not covered, see [NOTICE.md](https://github.com/MistrCech/valheim-serverside/blob/main/NOTICE.md).
 
 ## Building
 
