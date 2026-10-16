@@ -139,7 +139,7 @@ namespace Valheim_Serverside.Features
 		// second time they are kicked.
 		private static bool Soft(Rule rule)
 		{
-			return rule == Rule.Wards || rule == Rule.NoBuild || rule == Rule.Biome || rule == Rule.Dungeon || rule == Rule.Distance || rule == Rule.Identity;
+			return rule == Rule.Wards || rule == Rule.NoBuild || rule == Rule.Biome || rule == Rule.Dungeon || rule == Rule.Distance || rule == Rule.Identity || rule == Rule.Cultivated;
 		}
 
 		// A moment for the rest of an object's data to come before it is judged: the game sends an object and, a frame later, what it
@@ -149,6 +149,8 @@ namespace Valheim_Serverside.Features
 		private const int MaxQueued = 20000;
 		private const int MaxQueuedPerPlayer = 4000;
 		private const float KickMemorySeconds = 120f;
+		// Two breaks of a warn-first rule count as one incident when they are less than this far apart: one honest mistake can be several objects.
+		private const float IncidentSeconds = 15f;
 		private const int PlantMemory = 64;
 		private static readonly int s_hasFields = "HasFields".GetStableHashCode();
 
@@ -162,7 +164,6 @@ namespace Valheim_Serverside.Features
 			// 0: the game has no character, 1: its own, 2: another game's (a character is made by the game that plays it, so its id carries that session)
 			public int character;
 			public bool forged;
-			public bool admin;
 			public int looks;
 		}
 
@@ -213,6 +214,7 @@ namespace Valheim_Serverside.Features
 		private static readonly Dictionary<long, List<float>> s_strikes = new Dictionary<long, List<float>>();
 		// Objects waiting to be judged and who made them; the ones another game has written to meanwhile; the characters another game has written to.
 		private static readonly Dictionary<ZDOID, long> s_pending = new Dictionary<ZDOID, long>();
+		private static readonly Dictionary<long, KeyValuePair<float, bool>> s_adminAt = new Dictionary<long, KeyValuePair<float, bool>>();
 		private static readonly HashSet<ZDOID> s_tampered = new HashSet<ZDOID>();
 		private static readonly Dictionary<ZDOID, float> s_characterTampered = new Dictionary<ZDOID, float>();
 		private static readonly Queue<KeyValuePair<long, ZDOID>> s_characterWrites = new Queue<KeyValuePair<long, ZDOID>>();
@@ -255,7 +257,16 @@ namespace Valheim_Serverside.Features
 		{
 			static void Prefix(ZRpc rpc)
 			{
-				s_sender = Configuration.antiCheatEnabled.Value && ZNet.instance != null && ZNet.instance.IsServer() ? ZNet.instance.GetPeer(rpc) : null;
+				try
+				{
+					s_sender = Configuration.antiCheatEnabled.Value && ZNet.instance != null && ZNet.instance.IsServer() ? ZNet.instance.GetPeer(rpc) : null;
+					s_fed |= s_sender != null;
+				}
+				catch (Exception e)
+				{
+					s_sender = null;
+					Fault(e);
+				}
 			}
 
 			static void Finalizer()
@@ -299,18 +310,19 @@ namespace Valheim_Serverside.Features
 				}
 				try
 				{
-					if (s_pending.Count > 0 && s_pending.TryGetValue(__instance.m_uid, out long maker))
+					// A character object written by a game that is not the one that made it. (This comes first: a character is waiting to be judged
+					// like any other new object for its first 1.2 s.)
+					if (__instance.GetPrefab() == s_playerPrefab && __instance.m_uid.UserID != sender.m_uid)
 					{
-						if (maker != sender.m_uid)
-						{
-							s_tampered.Add(__instance.m_uid);
-						}
-						return;
-					}
-					if (__instance.GetPrefab() == s_playerPrefab && __instance.m_uid.UserID != sender.m_uid && s_characterWrites.Count < 200)
-					{
-						s_characterWrites.Enqueue(new KeyValuePair<long, ZDOID>(sender.m_uid, __instance.m_uid));
 						s_characterTampered[__instance.m_uid] = Time.time;
+						if (s_characterWrites.Count < 200)
+						{
+							s_characterWrites.Enqueue(new KeyValuePair<long, ZDOID>(sender.m_uid, __instance.m_uid));
+						}
+					}
+					if (s_pending.Count > 0 && s_pending.TryGetValue(__instance.m_uid, out long maker) && maker != sender.m_uid)
+					{
+						s_tampered.Add(__instance.m_uid);
 					}
 				}
 				catch (Exception e)
@@ -321,6 +333,9 @@ namespace Valheim_Serverside.Features
 		}
 
 		private static ZNetPeer s_sender;
+		// True once the feed has run, which it can only if the patches were applied (they are, at start, only if [AntiCheat] Enabled was set): the rules
+		// that read the character are not run without it, because they could not tell a character another game has written to.
+		private static bool s_fed;
 		// Set while an object is judged that another game has written to: what is wrong with it is taken away, but nobody is warned or kicked for it.
 		private static bool s_noBlame;
 
@@ -328,17 +343,31 @@ namespace Valheim_Serverside.Features
 		{
 			ZNetPeer peer = s_sender;
 			long user = peer.m_uid;
+			if (AdminOf(peer))
+			{
+				// Admins are not held to any rule, so nothing of theirs is queued (a pasted base of thousands of pieces is theirs to paste).
+				return;
+			}
 			s_waiting.TryGetValue(user, out int waiting);
 			if (waiting >= MaxQueuedPerPlayer || s_born.Count >= MaxQueued)
 			{
-				if (s_dropped++ == 0 || Rate("queue" + user, 60f))
+				s_dropped++;
+				if (waiting >= MaxQueuedPerPlayer)
 				{
-					Hit(Rule.Flood, user, peer, null, "?", $"{waiting} of its objects are waiting to be looked at ({s_born.Count} in all; the limit is {MaxQueuedPerPlayer} for one player); the rest are not looked at", peer.m_refPos);
+					// This player's own objects fill their share: they are acted on. When only the whole queue is full, whoever sent one more is not blamed.
+					if (Rate("queue" + user, 60f))
+					{
+						Hit(Rule.Flood, user, peer, null, "?", $"{waiting} of its objects are waiting to be looked at ({s_born.Count} in all; the limit is {MaxQueuedPerPlayer} for one player); the rest are not looked at", peer.m_refPos);
+					}
+				}
+				else if (Rate("queue", 60f))
+				{
+					Write($"{s_born.Count} objects are waiting to be looked at; those that come now are not looked at");
 				}
 				return;
 			}
 			s_waiting[user] = waiting + 1;
-			Born born = new Born { id = uid, user = user, at = Time.time, forged = uid.UserID != user, admin = IsAdmin(peer) };
+			Born born = new Born { id = uid, user = user, at = Time.time, forged = uid.UserID != user };
 			if (!s_who.ContainsKey(user))
 			{
 				s_who[user] = Who(peer);
@@ -462,6 +491,18 @@ namespace Valheim_Serverside.Features
 			return Configuration.antiCheatExemptAdmins.Value && peer != null && peer.m_socket != null && ZNet.instance.IsAdmin(peer.m_socket.GetHostName());
 		}
 
+		// The same, remembered for a few seconds per session: a game makes objects by the hundred and the account does not change.
+		private static bool AdminOf(ZNetPeer peer)
+		{
+			if (s_adminAt.TryGetValue(peer.m_uid, out KeyValuePair<float, bool> known) && Time.time - known.Key < 10f)
+			{
+				return known.Value;
+			}
+			bool admin = IsAdmin(peer);
+			s_adminAt[peer.m_uid] = new KeyValuePair<float, bool>(Time.time, admin);
+			return admin;
+		}
+
 		private static bool IsAdminAccount(string account)
 		{
 			return Configuration.antiCheatExemptAdmins.Value && !string.IsNullOrEmpty(account) && ZNet.instance.IsAdmin(account);
@@ -542,6 +583,10 @@ namespace Valheim_Serverside.Features
 			{
 				return;
 			}
+			if (!s_fed)
+			{
+				return;
+			}
 			RunKicks();
 			try
 			{
@@ -606,7 +651,7 @@ namespace Valheim_Serverside.Features
 			{
 				KeyValuePair<long, ZDOID> write = s_characterWrites.Dequeue();
 				ZNetPeer writer = ZNet.instance.GetPeer(write.Key);
-				if (writer == null || IsAdmin(writer))
+				if (writer == null || AdminOf(writer))
 				{
 					continue;
 				}
@@ -635,7 +680,7 @@ namespace Valheim_Serverside.Features
 			}
 			foreach (ZNetPeer peer in ZNet.instance.GetPeers().ToList())
 			{
-				if (!peer.IsReady() || peer.m_characterID.IsNone() || IsAdmin(peer))
+				if (!peer.IsReady() || peer.m_characterID.IsNone() || AdminOf(peer))
 				{
 					continue;
 				}
@@ -681,6 +726,7 @@ namespace Valheim_Serverside.Features
 				s_bursts.Remove(user);
 				s_tracks.Remove(user);
 				s_strikes.Remove(user);
+				s_adminAt.Remove(user);
 			}
 			foreach (long user in s_kicked.Where(kv => Time.time - kv.Value > KickMemorySeconds).Select(kv => kv.Key).ToList())
 			{
@@ -776,7 +822,7 @@ namespace Valheim_Serverside.Features
 		{
 			ZDO zdo = ZDOMan.instance.GetZDO(born.id);
 			long user = born.user;
-			if (zdo == null || born.admin)
+			if (zdo == null)
 			{
 				Done(born);
 				return;
@@ -933,8 +979,10 @@ namespace Valheim_Serverside.Features
 			if (ModeOf(Rule.Biome) != Mode.Off && info.onlyInBiome != Heightmap.Biome.None)
 			{
 				// Only where the server has the ground loaded: the game's own test reads the ground, and without it there is no answer.
+				// A ground that exists may not be built yet and then answers Meadows, and near a border its answer is an interpolation: the world
+				// generator must say the same before it is held against the player.
 				Heightmap ground = Heightmap.FindHeightmap(pos);
-				if (ground != null && (ground.GetBiome(pos) & info.onlyInBiome) == 0)
+				if (ground != null && (ground.GetBiome(pos) & info.onlyInBiome) == 0 && (WorldGenerator.instance.GetBiome(pos.x, pos.z) & info.onlyInBiome) == 0)
 				{
 					Hit(Rule.Biome, user, peer, zdo, info.name, $"it belongs to {info.onlyInBiome}, this is {ground.GetBiome(pos)}", pos);
 					return;
@@ -1212,7 +1260,8 @@ namespace Valheim_Serverside.Features
 			Write($"{line}; {outcome}");
 		}
 
-		// How many times in the last ten minutes a rule of the warn-first kind was broken, this time included.
+		// How many incidents in the last ten minutes a rule of the warn-first kind was broken in, this one included. Breaks less than IncidentSeconds
+		// after the last one are the same incident: one mistake of an honest player can be several objects, and a warning needs time to be read.
 		private static int Strike(long user)
 		{
 			if (!s_strikes.TryGetValue(user, out List<float> times))
@@ -1220,7 +1269,10 @@ namespace Valheim_Serverside.Features
 				s_strikes[user] = times = new List<float>();
 			}
 			times.RemoveAll(t => Time.time - t > 600f);
-			times.Add(Time.time);
+			if (times.Count == 0 || Time.time - times[times.Count - 1] >= IncidentSeconds)
+			{
+				times.Add(Time.time);
+			}
 			return times.Count;
 		}
 
@@ -1525,7 +1577,7 @@ namespace Valheim_Serverside.Features
 			if (sub == "status")
 			{
 				StringBuilder text = new StringBuilder();
-				text.Append($"anti-cheat: action {Configuration.antiCheatAction.Value}, admins {(Configuration.antiCheatExemptAdmins.Value ? "exempt" : "held to it as well")}; ");
+				text.Append($"anti-cheat: action {Configuration.antiCheatAction.Value}, admins {(Configuration.antiCheatExemptAdmins.Value ? "exempt" : "held to it as well")}{(s_fed ? "" : "; NOT RUNNING: no player's game has sent object data since the start (or [AntiCheat] Enabled was off at the start and the patches were not applied)")}; ");
 				text.Append($"{s_judged} objects of players' games judged, {s_born.Count} waiting, {s_reverted} taken away, {s_kicks} kick(s), {s_unattributed} from a game that had left, {s_blank} that never got their data, {s_dropped} not looked at (queue full)\n");
 				foreach (Rule rule in Enum.GetValues(typeof(Rule)))
 				{

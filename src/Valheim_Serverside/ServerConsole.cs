@@ -29,7 +29,7 @@ namespace Valheim_Serverside
 	*/
 	public static class ServerConsole
 	{
-		private const string Commands = "save | stop | players | give <item> <amount> <player> | broadcast <text> | event <name> <player> | events | characters | allow <character> | decay [away <player|all> <days> | exempt <player> | unexempt <player> | scan] | anticheat [scan | revert] | help"
+		private const string Commands = "save | stop | players | give <item> <amount> <player> | broadcast <text> | event <name> <player> | events | characters | allow <character> | decay [away <player|all> <days> | exempt <player> | unexempt <player> | scan] | anticheat [status | scan | revert [all]] | help"
 			+ " -- anything else goes to the game console: kick, ban, unban, banned, stopevent, devcommands, skiptime ...";
 
 		private static readonly ConcurrentQueue<string> s_commands = new ConcurrentQueue<string>();

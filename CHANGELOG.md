@@ -17,9 +17,9 @@
   player), `Level` (a creature above `MaxLevel` 10), `Wards` (a piece in a switched-on ward by a player not on its list,
   by the ward guard's rule), `NoBuild`, `Biome`, `Dungeon`. LogOnly: `CheatMarksOther` (other objects, and items, with the
   mark), `Cultivated`, `Burst`, `Health`, `Rotation`, `Teleport` (250 m in two seconds with no portal near), `Speed`
-  (30 m/s). `Distance`, `Wards`, `NoBuild`, `Biome`, `Dungeon` and `Identity` depend on the server's state a moment after
+  (30 m/s). `Distance`, `Wards`, `NoBuild`, `Biome`, `Dungeon`, `Cultivated` and `Identity` depend on the server's state a moment after
   the player's game decided and warn first (`SoftStrikes` 2, `WarnMessage`): the first time in ten minutes the object is
-  taken away and the player told, the second they are kicked. Admins are not held to the rules (`ExemptAdmins`). An object
+  taken away and the player told, the second time (15 s or more later; one mistake can be several objects) they are kicked. Admins are not held to the rules (`ExemptAdmins`). An object
   another game has written to meanwhile is judged but nobody is blamed for it; a character another game has written to is
   left out of the rules. Findings go to the log and `<world>.guard.log` (`AntiCheat: ...`, at most 120 lines a minute).
 - Console command `anticheat` (what was found since the start), `anticheat scan` (the stored world: what no tool of the
@@ -27,8 +27,8 @@
   `anticheat revert [all]` (takes away only what no tool of the game makes and dropped items above the maximum: never the
   contents of a chest, a piece in the wrong biome or a dungeon, or an object the game does not have, and it spares the
   pieces of admins and, unless `all` is said, of makers the character guard does not know).
-- README: the rules, how to roll them out, what they cannot see, and what 20 of the most downloaded cheat and tweak mods
-  leave in the world and which rule sees it (from their READMEs and, for the 20, their decompiled code).
+- README: the rules, how to roll them out, what they cannot see, and what popular cheat and tweak mods leave in the world and
+  which rule sees it (65 READMEs read, the decompiled code of 29 of the mods).
 
 ### Changed
 

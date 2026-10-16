@@ -345,13 +345,13 @@ namespace PluginConfiguration
 				"What happens when a rule that is set to On is broken: Log (write it to the log and <world>.guard.log, nothing else), Revert (also take the object away), Kick (also tell the player what was wrong, and remove them from the server six seconds later; they may come back, and what breaks a rule is taken away again). Every rule that is set to LogOnly only writes.");
 			antiCheatExemptAdmins = config.Bind<bool>("AntiCheat", "ExemptAdmins", true,
 				"Admins (adminlist.txt) are not held to the rules: they have the console and the tools that bend them.");
-			antiCheatMessage = config.Bind<string>("AntiCheat", "Message", "Your game did something that the game itself cannot do ({0}). What it made has been taken away, and you are removed from the server. Turn off the mod that did it before you come back.",
+			antiCheatMessage = config.Bind<string>("AntiCheat", "Message", "Your game did something that the game itself cannot do ({0}), and you are removed from the server. Whatever it made that the game cannot make has been taken away. Turn off the mod that did it before you come back.",
 				"Shown in the middle of the screen of a player who is about to be kicked. {0} is what they broke. Empty: no message.");
 			antiCheatSoftStrikes = config.Bind("AntiCheat", "SoftStrikes", 2,
-				new ConfigDescription("Distance, Wards, NoBuild, Biome, Dungeon and Identity depend on the state of the server a moment after the player's game decided (a ward that was switched on just then, ground that was not loaded yet, a position the server had not caught up with, a character that had just died): the first time one of them is broken in ten minutes, the object is taken away and the player gets WarnMessage; the SoftStrikes-th time they are kicked. 1: kicked at once like for the others.",
+				new ConfigDescription("Distance, Wards, NoBuild, Biome, Dungeon, Cultivated and Identity depend on the state of the server a moment after the player's game decided (a ward that was switched on just then, ground that was not loaded yet, a position the server had not caught up with, a character that had just died): the first time one of them is broken in ten minutes, the object is taken away and the player gets WarnMessage; the SoftStrikes-th time they are kicked. Breaks less than 15 seconds after the last one count as the same time (one mistake can be several objects). 1: kicked at once like for the others.",
 					new AcceptableValueRange<int>(1, 10)));
-			antiCheatWarnMessage = config.Bind<string>("AntiCheat", "WarnMessage", "That cannot be built here ({0}), and it was taken away. If it happens again you are removed from the server.",
-				"Shown in the middle of the screen of a player whose object was taken away by one of the rules that warn first (see SoftStrikes). {0} is what they broke. Empty: no message.");
+			antiCheatWarnMessage = config.Bind<string>("AntiCheat", "WarnMessage", "That is not allowed here ({0}). Anything your game made there has been taken away. If it happens again you are removed from the server.",
+				"Shown in the middle of the screen of a player who broke one of the rules that warn first (see SoftStrikes). {0} is what they broke. Empty: no message.");
 			antiCheatUnknownPrefabs = config.Bind("AntiCheat", "UnknownPrefabs", Valheim_Serverside.Features.AntiCheat.Mode.On,
 				"A player's game created an object that the server's game does not have at all (a mod that adds things to the game, a building planner's placeholders). Off, LogOnly or On.");
 			antiCheatNotBuildable = config.Bind("AntiCheat", "NotBuildable", Valheim_Serverside.Features.AntiCheat.Mode.On,
@@ -374,7 +374,7 @@ namespace PluginConfiguration
 			antiCheatItems = config.Bind("AntiCheat", "Items", Valheim_Serverside.Features.AntiCheat.Mode.On,
 				"An item that a player's game dropped on the ground with a stack, a quality or a durability above what the item can have (stack-size mods, spawn menus). Items in chests are not looked at; the console command `anticheat scan` lists dropped ones in the stored world. Off, LogOnly or On.");
 			antiCheatCheatMarks = config.Bind("AntiCheat", "CheatMarks", Valheim_Serverside.Features.AntiCheat.Mode.On,
-				"A creature that a player's game created with the game's own mark for cheating (the console's spawn command, which a player can only use with a mod that unlocks the console). Mods that keep the mark from being set or strip it (NoCheatedTag, CheaterBypass) get past this. Off, LogOnly or On.");
+				"A creature that a player's game created with the game's own mark for cheating (the console's spawn command, which a player can only use with a mod that unlocks the console). Mods that keep the item mark from being written (NoCheatedTag, CheaterBypass) do not touch this one; a flying player's hits on creatures write it later than the object is judged, so it is not seen then. Off, LogOnly or On.");
 			antiCheatCheatMarksOther = config.Bind("AntiCheat", "CheatMarksOther", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
 				"Anything else that carries the mark: a piece built from items an admin handed out is marked too, so this is only a trace by default. Off, LogOnly or On.");
 			antiCheatFly = config.Bind("AntiCheat", "Fly", Valheim_Serverside.Features.AntiCheat.Mode.On,
@@ -388,7 +388,7 @@ namespace PluginConfiguration
 			antiCheatDungeon = config.Bind("AntiCheat", "Dungeon", Valheim_Serverside.Features.AntiCheat.Mode.On,
 				"A piece that may not be built in a dungeon (most may not), built in one. The world modifier that allows building in dungeons is honoured; the game's other exception, an environment in which building is allowed, had no entries in the 1.0.20 server's data when this was written. Warns first, see SoftStrikes. Off, LogOnly or On.");
 			antiCheatCultivated = config.Bind("AntiCheat", "Cultivated", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
-				"A crop put on ground that is not cultivated. LogOnly by default: the server has the ground only near players and a moment behind, so an honest planter right after hoeing can be caught out. Off, LogOnly or On.");
+				"A crop put on ground that is not cultivated. LogOnly by default: the server has the ground only near players and a moment behind, so an honest planter right after hoeing can be caught out. Warns first, see SoftStrikes. Off, LogOnly or On.");
 			antiCheatBurst = config.Bind("AntiCheat", "Burst", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
 				"BurstPieces or more pieces (not plants) from one player in three seconds: more than the game places in that time (one in 0.4 s). LogOnly by default: a connection that stalls and then delivers everything at once looks the same. Off, LogOnly or On.");
 			antiCheatBurstPieces = config.Bind("AntiCheat", "BurstPieces", 15,
@@ -410,7 +410,7 @@ namespace PluginConfiguration
 			antiCheatLevel = config.Bind("AntiCheat", "Level", Valheim_Serverside.Features.AntiCheat.Mode.On,
 				"A creature that a player's game created with a level above MaxLevel (spawn menus let a player type any level). A player's game does create creatures now and then (the skeletons of a staff, the offspring of tamed animals), but none of those is above the levels the game gives its spawns. Off, LogOnly or On.");
 			antiCheatMaxLevel = config.Bind("AntiCheat", "MaxLevel", 10,
-				new ConfigDescription("The highest level of a creature that is let through. The game makes up to three stars (level 4); the world's modifiers add a little.",
+				new ConfigDescription("The highest level of a creature that is let through. The game makes up to three stars (level 4) from its spawn data; a spawn menu lets a player type any number.",
 					new AcceptableValueRange<int>(2, 1000)));
 			antiCheatTeleport = config.Bind("AntiCheat", "Teleport", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
 				"A character that moved TeleportMetres or more in a few seconds with no portal within 20 m of either end, and neither end in a dungeon (the map-click teleport mods). LogOnly by default: the check is new and the game has more ways to move a player than a portal. Off, LogOnly or On.");
