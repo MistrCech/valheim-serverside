@@ -728,6 +728,10 @@ namespace Valheim_Serverside.Features
 				s_strikes.Remove(user);
 				s_adminAt.Remove(user);
 			}
+			foreach (long user in s_adminAt.Keys.Where(u => ZNet.instance.GetPeer(u) == null).ToList())
+			{
+				s_adminAt.Remove(user);
+			}
 			foreach (long user in s_kicked.Where(kv => Time.time - kv.Value > KickMemorySeconds).Select(kv => kv.Key).ToList())
 			{
 				s_kicked.Remove(user);

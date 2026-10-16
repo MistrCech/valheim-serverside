@@ -350,7 +350,7 @@ namespace PluginConfiguration
 			antiCheatSoftStrikes = config.Bind("AntiCheat", "SoftStrikes", 2,
 				new ConfigDescription("Distance, Wards, NoBuild, Biome, Dungeon, Cultivated and Identity depend on the state of the server a moment after the player's game decided (a ward that was switched on just then, ground that was not loaded yet, a position the server had not caught up with, a character that had just died): the first time one of them is broken in ten minutes, the object is taken away and the player gets WarnMessage; the SoftStrikes-th time they are kicked. Breaks less than 15 seconds after the last one count as the same time (one mistake can be several objects). 1: kicked at once like for the others.",
 					new AcceptableValueRange<int>(1, 10)));
-			antiCheatWarnMessage = config.Bind<string>("AntiCheat", "WarnMessage", "That is not allowed here ({0}). Anything your game made there has been taken away. If it happens again you are removed from the server.",
+			antiCheatWarnMessage = config.Bind<string>("AntiCheat", "WarnMessage", "That is not allowed ({0}). If your game made something it should not, it has been taken away. If it happens again you are removed from the server.",
 				"Shown in the middle of the screen of a player who broke one of the rules that warn first (see SoftStrikes). {0} is what they broke. Empty: no message.");
 			antiCheatUnknownPrefabs = config.Bind("AntiCheat", "UnknownPrefabs", Valheim_Serverside.Features.AntiCheat.Mode.On,
 				"A player's game created an object that the server's game does not have at all (a mod that adds things to the game, a building planner's placeholders). Off, LogOnly or On.");
@@ -384,7 +384,7 @@ namespace PluginConfiguration
 			antiCheatNoBuild = config.Bind("AntiCheat", "NoBuild", Valheim_Serverside.Features.AntiCheat.Mode.On,
 				"A piece placed in a place where the game lets no one build (the sites of the bosses' altars and the like). Warns first, see SoftStrikes. Off, LogOnly or On.");
 			antiCheatBiome = config.Bind("AntiCheat", "Biome", Valheim_Serverside.Features.AntiCheat.Mode.On,
-				"A piece that belongs to one biome (a few do) placed in another; not judged where the server has not got the ground loaded. Warns first, see SoftStrikes. Off, LogOnly or On.");
+				"A piece that belongs to one biome (a few do) placed in another; not judged where the server has not got the ground loaded, and only if the world generator agrees that it is the wrong biome. Warns first, see SoftStrikes. Off, LogOnly or On.");
 			antiCheatDungeon = config.Bind("AntiCheat", "Dungeon", Valheim_Serverside.Features.AntiCheat.Mode.On,
 				"A piece that may not be built in a dungeon (most may not), built in one. The world modifier that allows building in dungeons is honoured; the game's other exception, an environment in which building is allowed, had no entries in the 1.0.20 server's data when this was written. Warns first, see SoftStrikes. Off, LogOnly or On.");
 			antiCheatCultivated = config.Bind("AntiCheat", "Cultivated", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
@@ -404,7 +404,7 @@ namespace PluginConfiguration
 			antiCheatForged = config.Bind("AntiCheat", "Forged", Valheim_Serverside.Features.AntiCheat.Mode.On,
 				"An object that arrived from one player's game with an id that carries the session of another game. The game always makes its objects under its own session; a modified game can write someone else's, to have its work put on them. Judged by the connection it arrived on, so the one who is acted on is the sender. Off, LogOnly or On.");
 			antiCheatIdentity = config.Bind("AntiCheat", "Identity", Valheim_Serverside.Features.AntiCheat.Mode.On,
-				"A game that names as its own a character that another game made, or that sends a piece (an object with a creator) while it has no character at all. The game's character is made by the game that plays it, and a piece can only be placed by a character. Off, LogOnly or On.");
+				"A game that names as its own a character that another game made, or that sends a piece (an object with a creator) while it has no character at all. The game's character is made by the game that plays it, and a piece can only be placed by a character. Warns first, see SoftStrikes. Off, LogOnly or On.");
 			antiCheatFlood = config.Bind("AntiCheat", "Flood", Valheim_Serverside.Features.AntiCheat.Mode.On,
 				"A game that has thousands of objects waiting to be looked at: more than the game makes in minutes. The objects past the limit are not looked at (a game cannot be allowed to hide its work among junk), and the player is acted on. Nothing is taken away. Off, LogOnly or On.");
 			antiCheatLevel = config.Bind("AntiCheat", "Level", Valheim_Serverside.Features.AntiCheat.Mode.On,
@@ -415,7 +415,7 @@ namespace PluginConfiguration
 			antiCheatTeleport = config.Bind("AntiCheat", "Teleport", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
 				"A character that moved TeleportMetres or more in a few seconds with no portal within 20 m of either end, and neither end in a dungeon (the map-click teleport mods). LogOnly by default: the check is new and the game has more ways to move a player than a portal. Off, LogOnly or On.");
 			antiCheatTeleportMetres = config.Bind("AntiCheat", "TeleportMetres", 250f,
-				new ConfigDescription("How far a character must have moved between two looks (two seconds apart) to be a teleport. The fastest ship under the best wind makes about 15 m/s.",
+				new ConfigDescription("How far a character must have moved between two looks (the server looks every two seconds and counts looks 1 to 8 s apart) to be a teleport. The fastest ship under the best wind makes about 15 m/s.",
 					new AcceptableValueRange<float>(50f, 5000f)));
 			antiCheatSpeed = config.Bind("AntiCheat", "Speed", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
 				"A character that moved faster than SpeedLimit metres a second, sideways, in two looks in a row. LogOnly by default. Off, LogOnly or On.");

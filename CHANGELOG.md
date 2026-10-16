@@ -16,7 +16,7 @@
   given component fields), `Fly` (the character's debug-fly switch), `Flood` (thousands of objects waiting from one
   player), `Level` (a creature above `MaxLevel` 10), `Wards` (a piece in a switched-on ward by a player not on its list,
   by the ward guard's rule), `NoBuild`, `Biome`, `Dungeon`. LogOnly: `CheatMarksOther` (other objects, and items, with the
-  mark), `Cultivated`, `Burst`, `Health`, `Rotation`, `Teleport` (250 m in two seconds with no portal near), `Speed`
+  mark), `Cultivated`, `Burst`, `Health`, `Rotation`, `Teleport` (250 m between two looks, every 2 s, with no portal near), `Speed`
   (30 m/s). `Distance`, `Wards`, `NoBuild`, `Biome`, `Dungeon`, `Cultivated` and `Identity` depend on the server's state a moment after
   the player's game decided and warn first (`SoftStrikes` 2, `WarnMessage`): the first time in ten minutes the object is
   taken away and the player told, the second time (15 s or more later; one mistake can be several objects) they are kicked. Admins are not held to the rules (`ExemptAdmins`). An object
