@@ -10,7 +10,7 @@ namespace Valheim_Serverside
 		Commands read from the server's standard input.
 
 		Own commands: `save`, `stop`, `players`, `give <item> <amount> <player>`, `broadcast <text>`,
-		`event <name> <player>`, `events`, `help`. Anything else is passed to the game's own console
+		`event <name> <player>`, `events`, `characters`, `allow <character>`, `decay ...` (base decay), `help`. Anything else is passed to the game's own console
 		(the Terminal a dedicated server has but never reads), so the vanilla server commands work
 		too: `kick`, `ban`, `unban`, `banned`, `stopevent`, `randomevent`, `setkey`, `removekey`, and
 		after `devcommands` the cheat commands that need no player: `skiptime`, `resetkeys`,
@@ -29,7 +29,7 @@ namespace Valheim_Serverside
 	*/
 	public static class ServerConsole
 	{
-		private const string Commands = "save | stop | players | give <item> <amount> <player> | broadcast <text> | event <name> <player> | events | characters | allow <character> | help"
+		private const string Commands = "save | stop | players | give <item> <amount> <player> | broadcast <text> | event <name> <player> | events | characters | allow <character> | decay [away <player|all> <days> | exempt <player> | unexempt <player> | scan] | help"
 			+ " -- anything else goes to the game console: kick, ban, unban, banned, stopevent, devcommands, skiptime ...";
 
 		private static readonly ConcurrentQueue<string> s_commands = new ConcurrentQueue<string>();
@@ -186,6 +186,10 @@ namespace Valheim_Serverside
 					case "allow":
 						// allow <character name, may contain spaces>: lets in a character the guard turned away
 						Reply(!worldLoaded ? "no world loaded" : words.Length < 2 ? "usage: allow <character>" : Features.CharacterGuard.Allow(string.Join(" ", words, 1, words.Length - 1)));
+						break;
+					case "decay":
+						// decay: who is away and every base's stage; decay away|exempt|unexempt <player> ...; decay scan: a pass now
+						Reply(worldLoaded ? Features.Decay.Console(words) : "no world loaded");
 						break;
 					case "help":
 						Reply("commands: " + Commands);

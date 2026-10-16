@@ -25,10 +25,14 @@ namespace Valheim_Serverside.Features
 		has them on its list -- the owner (its creator) or a player who put their name on it with E. All of it
 		is done on the server, for every game that talks to it, so the clients stay vanilla.
 
-		How: every routed RPC a client sends passes ZRoutedRpc.RPC_RoutedRPC on the server, whoever owns the
-		object it is for (the server's own handler, or forwarded to the game of a player who owns it). It is
+		How: every routed RPC a client sends for an object that is not its own passes ZRoutedRpc.RPC_RoutedRPC on
+		the server (the server's own handler, or forwarded to the game of the player who owns the object). It is
 		looked at there, before anything is done with it, and judged by the player the connection belongs to --
-		the sender id written in the packet is the client's own claim.
+		the sender id written in the packet is the client's own claim. What a game owns itself it handles itself
+		(ZRoutedRpc.InvokeRoutedRPC calls its own handler and routes nothing): this mod's Core patch makes the
+		server the owner of what stands near players, so the builds of others are not a thief's to own, but a
+		piece a player has just placed stays with their game while they are in the area (the limit on switched-on
+		wards below is therefore also kept on the state of the wards).
 		- Structures (the build pieces players made -- anything with a creator -- and the ward itself):
 		  RPC_Damage, RPC_Remove, RPC_Repair of a player who may not act there are dropped. A hit with no attacker
 		  (fire, a falling object) or one by a creature that the sender's game owns (a raid, a monster they
@@ -59,7 +63,7 @@ namespace Valheim_Serverside.Features
 		player's character as its own, or name a creature as the attacker of a hit. Each is named in the README.
 
 		Every refusal is written to <world>.guard.log (the character guard's and the item ledger's file): who,
-		what, where, whose ward. With LogOnly the line says "would refuse" and nothing is stopped.
+		what, where, whose ward. With LogOnly the line ends "LogOnly: let through" and nothing is stopped.
 	*/
 	public class WardGuard : IFeature
 	{
@@ -443,18 +447,23 @@ namespace Valheim_Serverside.Features
 			int prefab = target.GetPrefab();
 			if (h.method == s_toggleEnabled || h.method == s_togglePermitted)
 			{
-				if (spoofing == Mode.Off || !s_wardRadius.ContainsKey(prefab))
+				int limit = h.method == s_toggleEnabled ? Configuration.wardGuardMaxActiveWards.Value : 0;
+				if (!s_wardRadius.ContainsKey(prefab) || (spoofing == Mode.Off && limit <= 0))
 				{
 					return true;
 				}
 				long claimed = pkg.ReadPackage().ReadLong();
 				long actual = PlayerId(peer);
-				if (actual != 0L && claimed == actual)
+				if (actual == 0L || claimed != actual)
 				{
-					return true;
+					if (spoofing == Mode.Off)
+					{
+						return true;
+					}
+					Report(peer, target, null, "spoofing", $"asked a ward to {(h.method == s_toggleEnabled ? "switch itself" : "change its list")} as player {claimed}, theirs is {actual}", spoofing == Mode.On);
+					return spoofing != Mode.On;
 				}
-				Report(peer, target, null, "spoofing", $"asked a ward to {(h.method == s_toggleEnabled ? "switch itself" : "change its list")} as player {claimed}, theirs is {actual}", spoofing == Mode.On);
-				return spoofing != Mode.On;
+				return limit <= 0 || IsAdmin(peer) || WithinWardLimit(peer, target, actual, limit);
 			}
 			if (h.method == s_damage || h.method == s_remove || h.method == s_repair)
 			{
@@ -493,6 +502,199 @@ namespace Valheim_Serverside.Features
 				}
 			}
 			return true;
+		}
+
+		/*
+			A ward is switched on by its creator pressing E on it (RPC ToggleEnabled; the game does nothing for anyone else). A creator
+			who already has `limit` wards on is refused: the request is dropped and they are told. Switching a ward off is never held back.
+			The scan that finds the wards runs every 5 seconds, so a ward the creator switched on a moment ago is remembered here
+			for ten seconds, or three quick presses on three wards would all pass.
+		*/
+		private static readonly Dictionary<ZDOID, float> s_switchedOn = new Dictionary<ZDOID, float>();
+
+		private static bool WithinWardLimit(ZNetPeer peer, ZDO ward, long player, int limit)
+		{
+			// A ward switched on a moment ago is on, whatever the copy of it here says yet: asking again is asking for it to go off.
+			if (s_switchedOn.Remove(ward.m_uid) || ward.GetLong(ZDOVars.s_creator, 0L) != player || ward.GetBool(ZDOVars.s_enabled))
+			{
+				return true;
+			}
+			foreach (ZDOID id in s_switchedOn.Where(kv => Time.time - kv.Value > 10f).Select(kv => kv.Key).ToList())
+			{
+				s_switchedOn.Remove(id);
+			}
+			HashSet<ZDOID> on = new HashSet<ZDOID>();
+			foreach (ZDOID id in s_wardIds)
+			{
+				ZDO other = ZDOMan.instance.GetZDO(id);
+				if (other != null && id != ward.m_uid && other.GetLong(ZDOVars.s_creator, 0L) == player && other.GetBool(ZDOVars.s_enabled))
+				{
+					on.Add(id);
+				}
+			}
+			foreach (ZDOID id in s_switchedOn.Keys)
+			{
+				ZDO other = ZDOMan.instance.GetZDO(id);
+				if (id != ward.m_uid && other != null && other.GetLong(ZDOVars.s_creator, 0L) == player)
+				{
+					on.Add(id);
+				}
+			}
+			if (on.Count < limit)
+			{
+				s_switchedOn[ward.m_uid] = Time.time;
+				return true;
+			}
+			if (Rate($"log/limit/{peer.m_uid}", 60f))
+			{
+				string line = $"{Clean(peer.m_playerName)} ({player}) tried to switch on a ward at {Where(ward)} with {on.Count} of {limit} already on -- refused";
+				ServersidePlugin.logger.LogInfo("Ward guard: " + line);
+				GuardLog.Write("ward guard: " + line);
+			}
+			string message = Configuration.wardGuardMaxActiveWardsMessage.Value;
+			if (!string.IsNullOrEmpty(message) && Rate($"say/limit/{peer.m_uid}", 3f))
+			{
+				string text;
+				try
+				{
+					text = string.Format(message, limit);
+				}
+				catch (FormatException)
+				{
+					text = message;
+				}
+				ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage", (int)MessageHud.MessageType.Center, text);
+			}
+			return false;
+		}
+
+		/*
+			The same limit on what is, not on what is asked. A ward a player has just placed is owned by that player's game (it stays with
+			the game that placed it while that player is in the area), so pressing E on it is handled there and the request never passes
+			the server. The switched-on ward shows up in the data the game sends the server within a moment, and the pass that looks for
+			wards counts them: a creator with more switched on than the limit has the newest switched off by the server (it takes the ward
+			over, writes `enabled` off and tells them). The wards that are on when the server starts stay on whatever the limit is.
+		*/
+		private static readonly Dictionary<ZDOID, float> s_firstOn = new Dictionary<ZDOID, float>();
+		private static readonly HashSet<ZDOID> s_standing = new HashSet<ZDOID>();
+		private static bool s_limitSeeded;
+		private static int s_lastLimit = -1;
+		private static float s_nextLimit;
+
+		public static void Tick()
+		{
+			if (!Configuration.wardGuardEnabled.Value || Time.time < s_nextLimit || !ZNet.instance || !ZNet.instance.IsServer() || ZDOMan.instance == null)
+			{
+				return;
+			}
+			s_nextLimit = Time.time + 5f;
+			if (!Ready())
+			{
+				return;
+			}
+			EnforceWardLimit();
+		}
+
+		private static void EnforceWardLimit()
+		{
+			int limit = Configuration.wardGuardMaxActiveWards.Value;
+			Dictionary<long, List<ZDO>> on = new Dictionary<long, List<ZDO>>();
+			foreach (ZDOID id in s_wardIds)
+			{
+				ZDO ward = ZDOMan.instance.GetZDO(id);
+				if (ward == null || !ward.GetBool(ZDOVars.s_enabled))
+				{
+					s_firstOn.Remove(id);
+					continue;
+				}
+				if (!s_firstOn.ContainsKey(id))
+				{
+					s_firstOn[id] = Time.time;
+				}
+				long creator = ward.GetLong(ZDOVars.s_creator, 0L);
+				if (!on.TryGetValue(creator, out List<ZDO> list))
+				{
+					on[creator] = list = new List<ZDO>();
+				}
+				list.Add(ward);
+			}
+			if (!s_limitSeeded || limit != s_lastLimit)
+			{
+				// The first look, and every time the limit is changed: what is on now was let on (or came before the rule) and stays.
+				bool first = !s_limitSeeded;
+				s_limitSeeded = true;
+				s_lastLimit = limit;
+				foreach (List<ZDO> list in on.Values)
+				{
+					foreach (ZDO ward in list)
+					{
+						s_standing.Add(ward.m_uid);
+					}
+				}
+				if (first)
+				{
+					string above = string.Join(", ", on.Where(kv => limit > 0 && kv.Value.Count > limit).Select(kv => kv.Key + " has " + kv.Value.Count));
+					ServersidePlugin.logger.LogInfo($"Ward guard: {s_standing.Count} ward(s) are switched on at the start; they stay on whatever MaxActiveWards is" + (above.Length > 0 ? $" (above the limit of {limit}: {above})" : ""));
+				}
+				else
+				{
+					ServersidePlugin.logger.LogInfo($"Ward guard: MaxActiveWards is {limit} now; the {s_standing.Count} ward(s) that are on stay on");
+				}
+				return;
+			}
+			if (limit <= 0)
+			{
+				return;
+			}
+			Dictionary<long, ZNetPeer> peers = new Dictionary<long, ZNetPeer>();
+			foreach (ZNetPeer peer in ZNet.instance.GetPeers())
+			{
+				long player = peer.IsReady() ? PlayerId(peer) : 0L;
+				if (player != 0L)
+				{
+					peers[player] = peer;
+				}
+			}
+			foreach (KeyValuePair<long, List<ZDO>> creator in on)
+			{
+				// Only while the creator is in the game: that is when a ward is switched on, and they can be told.
+				if (creator.Key == 0L || !peers.TryGetValue(creator.Key, out ZNetPeer owner))
+				{
+					continue;
+				}
+				if (IsAdmin(owner))
+				{
+					continue;
+				}
+				int room = limit - creator.Value.Count(w => s_standing.Contains(w.m_uid));
+				foreach (ZDO ward in creator.Value.Where(w => !s_standing.Contains(w.m_uid)).OrderBy(w => s_firstOn[w.m_uid]).ThenBy(w => w.m_uid).Skip(Math.Max(0, room)))
+				{
+					ward.SetOwner(ZDOMan.GetSessionID());
+					ward.Set(ZDOVars.s_enabled, false);
+					s_firstOn.Remove(ward.m_uid);
+					s_switchedOn.Remove(ward.m_uid);
+					if (Rate($"log/limit/{creator.Key}/{ward.m_uid}", 60f))
+					{
+						string line = $"{Clean(owner.m_playerName)} ({creator.Key}) has more than {limit} ward(s) switched on: the ward at {Where(ward)} was switched off";
+						ServersidePlugin.logger.LogInfo("Ward guard: " + line);
+						GuardLog.Write("ward guard: " + line);
+					}
+					string message = Configuration.wardGuardMaxActiveWardsMessage.Value;
+					if (!string.IsNullOrEmpty(message) && Rate($"say/limit/{owner.m_uid}", 3f))
+					{
+						string text;
+						try
+						{
+							text = string.Format(message, limit);
+						}
+						catch (FormatException)
+						{
+							text = message;
+						}
+						ZRoutedRpc.instance.InvokeRoutedRPC(owner.m_uid, "ShowMessage", (int)MessageHud.MessageType.Center, text);
+					}
+				}
+			}
 		}
 
 		// A hit that is not a player's own: it has no attacker (fire, a falling object), or a creature made it in the game of

@@ -75,6 +75,23 @@ namespace PluginConfiguration
 		public static ConfigEntry<bool> wardGuardExemptAdmins;
 		public static ConfigEntry<bool> wardGuardFlash;
 		public static ConfigEntry<string> wardGuardMessage;
+		public static ConfigEntry<int> wardGuardMaxActiveWards;
+		public static ConfigEntry<string> wardGuardMaxActiveWardsMessage;
+
+		public static ConfigEntry<Valheim_Serverside.Features.Decay.Mode> decayMode;
+		public static ConfigEntry<float> decayWardGraceDays;
+		public static ConfigEntry<float> decayWardFadeDays;
+		public static ConfigEntry<float> decayWorkbenchGraceDays;
+		public static ConfigEntry<float> decayWorkbenchFadeDays;
+		public static ConfigEntry<float> decayWorkbenchRadius;
+		public static ConfigEntry<float> decayNoneGraceDays;
+		public static ConfigEntry<float> decayNoneFadeDays;
+		public static ConfigEntry<float> decayActiveMinutes;
+		public static ConfigEntry<float> decayScanMinutes;
+		public static ConfigEntry<int> decayMaxRemovals;
+		public static ConfigEntry<bool> decayExemptAdmins;
+		public static ConfigEntry<bool> decayLoginMessage;
+
 		public static ConfigEntry<bool> guardianStonesEnabled;
 		public static ConfigEntry<bool> welcomeEnabled;
 		public static ConfigEntry<string> welcomeTitle;
@@ -241,6 +258,48 @@ namespace PluginConfiguration
 				"The ward flashes (the game's own shield effect, every player near sees it) when it refuses something, at most every 3 seconds.");
 			wardGuardMessage = config.Bind<string>("WardGuard", "Message", "This place is under a ward. Ask its owner to put you on the ward's list.",
 				"Shown in the middle of the screen of a player the ward refused, at most every 15 seconds. Empty: no message.");
+			wardGuardMaxActiveWards = config.Bind("WardGuard", "MaxActiveWards", 2,
+				new ConfigDescription("How many wards one player may have switched on at once (a ward is switched on by its creator pressing E on it; building one costs a surtling core, so it takes a few). A player who has that many and tries to switch on another is refused and told; switching one off first, or taking it down, makes room. Two ways: the request is dropped when it passes the server, and, because the game of the player who has just placed a ward handles the key press itself, the server also looks at the wards that are on every few seconds and switches off the newest one of a player who has too many. Wards that are on when the server starts, or when this setting is changed, stay on. A player is held to it while they are in the game (that is when a ward is switched on, and they can be told), and every ward above the limit goes off, the newest first. Admins are not held to it (ExemptAdmins). 0: no limit; there is no LogOnly for this. Without a limit the world fills with wards, and every ward is a base the decay (see [Decay]) keeps alive.",
+					new AcceptableValueRange<int>(0, 50)));
+			wardGuardMaxActiveWardsMessage = config.Bind<string>("WardGuard", "MaxActiveWardsMessage", "You can keep only {0} wards switched on. Switch one of yours off first (E on it), or take it down. A ward that is off no longer holds its base against decay.",
+				"Shown in the middle of the screen of a player refused a further ward, at most every 3 seconds. {0} is the limit. Empty: no message.");
+
+			decayMode = config.Bind("Decay", "Mode", Valheim_Serverside.Features.Decay.Mode.Off,
+				"Take down what players built once the players it belongs to have stayed away long enough, so abandoned bases do not fill the world for ever. Off: nothing is tracked, and the decay clock stands still. DryRun: tracks the players and writes to the log (and <world>.guard.log) what would be taken down and when, changes nothing in the world -- run it for two weeks first (the first ward base can only begin after WardGraceDays) and read the log; it lists portals, ships and chests in every base. On: does it; `decay clear` on the server console is the way back. Pieces are everything a player built: walls and floors, chests with what is in them, beds, portals, ships and carts, crops, signs. A piece is protected as long as any claim on it is within its grace: a ward that is switched on (the owner and the players on its list hold it), a workbench within WorkbenchRadius (its builder holds it), or its builder alone; when the last has lapsed the piece goes with the base of that claim, over that claim's fade (see the days below). Nothing starts or is taken down while one of the players who hold the base is in the game. The decay clock counts only the time the server runs under decay. A player the server has not met counts as active from the first time it sees their builds, so switching decay on for the first time takes down nothing at once; after a dry run, the bases that have lapsed in the meantime (the log lists them) begin as soon as On is set. Players are told when they join. See the README.");
+			decayWardGraceDays = config.Bind("Decay", "WardGraceDays", 14f,
+				new ConfigDescription("A base covered by a ward that is switched on starts to decay this many days after the last of the ward's owner and the players on its list was active. The ward goes first. Then WardFadeDays go by before the last piece is gone.",
+					new AcceptableValueRange<float>(0f, 365f)));
+			decayWardFadeDays = config.Bind("Decay", "WardFadeDays", 10f,
+				new ConfigDescription("Over how many days the pieces of a ward base go once it has started to decay: the top pieces first (roofs, walls, floors), then chests, beds and benches, the workbench last. Total life of an abandoned ward base: WardGraceDays + WardFadeDays. 0: every piece is marked to go at once and the passes that follow take them down, MaxRemovals at a time.",
+					new AcceptableValueRange<float>(0f, 365f)));
+			decayWorkbenchGraceDays = config.Bind("Decay", "WorkbenchGraceDays", 7f,
+				new ConfigDescription("The same for what has no ward over it but stands within WorkbenchRadius of a workbench: it starts to decay this many days after the workbench's builder was last active.",
+					new AcceptableValueRange<float>(0f, 365f)));
+			decayWorkbenchFadeDays = config.Bind("Decay", "WorkbenchFadeDays", 10f,
+				new ConfigDescription("Over how many days a workbench base then goes.",
+					new AcceptableValueRange<float>(0f, 365f)));
+			decayWorkbenchRadius = config.Bind("Decay", "WorkbenchRadius", 20f,
+				new ConfigDescription("How far, in metres sideways, a workbench protects the pieces around it (the game lets you build within 20 m of a workbench).",
+					new AcceptableValueRange<float>(1f, 100f)));
+			decayNoneGraceDays = config.Bind("Decay", "NoneGraceDays", 3f,
+				new ConfigDescription("The same for a piece with neither ward nor workbench: it starts to decay this many days after its builder was last active. The pieces of one builder that have no better protection are one camp.",
+					new AcceptableValueRange<float>(0f, 365f)));
+			decayNoneFadeDays = config.Bind("Decay", "NoneFadeDays", 4f,
+				new ConfigDescription("Over how many days a camp then goes.",
+					new AcceptableValueRange<float>(0f, 365f)));
+			decayActiveMinutes = config.Bind("Decay", "ActiveMinutes", 10f,
+				new ConfigDescription("A player counts as active when they have been in the game this many minutes in one go, so that a quick login to see whether the base is still there does not keep it alive for ever. While they are in the game their base is not started or taken down, whatever their time so far. A player who holds a decaying base and is active again stops the decay of what is left: what is gone is gone, and a ward has to be built again.",
+					new AcceptableValueRange<float>(0f, 600f)));
+			decayScanMinutes = config.Bind("Decay", "ScanMinutes", 10f,
+				new ConfigDescription("How often the world is looked through (one pass over all objects, some tens of milliseconds) to start decay, take down what is due and update what players are told.",
+					new AcceptableValueRange<float>(1f, 120f)));
+			decayMaxRemovals = config.Bind("Decay", "MaxRemovals", 200,
+				new ConfigDescription("At most this many pieces are taken down in one pass; the rest wait for the next. Spreads the load of a big base over several passes.",
+					new AcceptableValueRange<int>(1, 5000)));
+			decayExemptAdmins = config.Bind<bool>("Decay", "ExemptAdmins", true,
+				"The characters of admins (adminlist.txt) count as always active, as do those put on the list with the console command `decay exempt <player>`, so what they built -- a spawn hub, say -- never decays: their pieces, and their ward and workbench over their own pieces. Over the pieces of others their ward or workbench holds only as long as its keepers really play. The server learns that a character is an admin when it is online, or from the character guard's record of its account; `decay exempt <id>` is the sure way.");
+			decayLoginMessage = config.Bind<bool>("Decay", "LoginMessage", true,
+				"Tell a player half a minute after they join about their bases: those that are decaying (first), and those that start to soon (within half their grace, at most three days). At most four lines are shown.");
 
 			guardianStonesEnabled = config.Bind<bool>("GuardianStones", "Enabled", false,
 				"Show a boss's trophy on its guardian stone, and so offer its power, only to players who have beaten that boss themselves, as their own client's raid list shows it (the same reading as the night spawn guard). To everyone else's game the stone is empty: a vanilla client cannot take a power it cannot see, and the server could not take one back. Players who may not use a stone cannot hang a trophy on it either.");

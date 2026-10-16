@@ -160,6 +160,12 @@ namespace Valheim_Serverside.Features
 			return FreshnessProblems(Wearing(character), events, true).Count == 0;
 		}
 
+		// The account (the connection's host name, as the admin list spells it) a character was last seen with, or null.
+		internal static string AccountOf(long id)
+		{
+			return s_records.TryGetValue(id, out Record record) && !string.IsNullOrEmpty(record.account) ? record.account : null;
+		}
+
 		// Called from ServersidePlugin.Update while the mod is installed.
 		public static void Tick()
 		{

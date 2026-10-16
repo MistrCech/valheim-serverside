@@ -1,3 +1,45 @@
+## [1.20.0] - 2026-10-16
+
+### Added
+
+- `[Decay]` (off by default; `Mode` Off / DryRun / On): base decay. What players built is taken down by the server once
+  the players it belongs to have stayed away long enough, so abandoned bases do not fill the world. A piece can be
+  claimed by a ward that is switched on over it (its owner and the players on its list hold it; 14 days of grace, then
+  10 days over which it goes), by a workbench within 20 m (its builder; 7 + 10) and by its builder alone (a camp; 3 + 4).
+  It is protected while any claim is within its grace; when the last has lapsed it goes with the base of that claim.
+  The two halves of a portal pair live while either end is held. A player counts as active after `ActiveMinutes` (10) in
+  the game in one go. Nothing starts or is taken down while one of the players who hold the base is in the game, while a
+  player is connecting, while a player stands by a ship or cart that is due, or while a protected piece rests against it;
+  at most five bases begin in a pass. A player the server has not met counts as active from the first time it sees their
+  builds, so switching it on takes nothing down at once. The decay clock counts only the time the server runs under
+  decay (a week of maintenance takes nothing from anyone's grace). When a base's grace is over every piece is given the
+  time at which it goes, spread over the fade: the ward first (within a day, so a mistake can be put right before it is
+  gone for good), then the highest pieces, then chests and beds, the workbench last; the pieces that go within a day are
+  worn (a fifth of their health). Every pass the marked pieces are judged again, one by one: a piece whose builder (or
+  any other claim on it) is active again is unmarked and mended. Bases are named by builder and place, not by the game's
+  object numbers, which change every time the world is loaded. Players are told at login (at most four lines). Admins'
+  characters (`ExemptAdmins`, learned online or from the character guard) and those named with `decay exempt` count as
+  always active for their own pieces, ward and workbench; over other players' pieces their ward or workbench holds only
+  while its keepers really play. DryRun writes what it would do (with portals, ships and chests counted) to the log and
+  `<world>.guard.log` and changes nothing. New console command `decay` (who is away, every base and its stage;
+  `decay away <player|all> <days>`, `decay exempt|unexempt <player>`, `decay clear`, `decay scan`). State in
+  `<world>.decay.txt`, which also names the world (a file of another world of the same name is set aside); with the file
+  unwritable nothing is taken down. See the README.
+- `[WardGuard] MaxActiveWards` (2; 0: no limit) and `MaxActiveWardsMessage`: a player who already has that many wards
+  switched on is refused a further one. Two ways, because the game of the player who has just placed a ward handles the
+  key press itself and the request never passes the server: the `ToggleEnabled` request is dropped when it does, and
+  every five seconds the server counts the wards that are on and switches off the newest ones of a player who has too
+  many (taking the ward over and writing `enabled` off), and tells them. Wards that are on when the server starts, or
+  when the limit is changed, stay on. Switching one off, or taking it down, makes room. Needs `[WardGuard] Enabled`.
+
+### Changed
+
+- The ward guard's description of what it sees is exact now: a request for an object that a player's own game owns is
+  handled in that game and never passes the server. This mod's core patch gives the server the objects near players, so
+  the builds of others are not a thief's to own; a piece a player has just placed stays with their game while they are
+  in the area.
+- Plugin version 1.20.0.
+
 ## [1.19.0] - 2026-10-16
 
 ### Added
