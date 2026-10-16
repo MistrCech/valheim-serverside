@@ -117,6 +117,7 @@
     <Compile Include="Features\PortalLock.cs" />
     <Compile Include="Features\WardGuard.cs" />
     <Compile Include="Features\Decay.cs" />
+    <Compile Include="Features\AntiCheat.cs" />
     <Compile Include="Features\Progress.cs" />
     <Compile Include="Features\NightSpawnGuard.cs" />
     <Compile Include="Features\Core.cs" />

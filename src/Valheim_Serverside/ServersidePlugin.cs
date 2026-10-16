@@ -23,7 +23,7 @@ namespace Valheim_Serverside
 		// detect it by GUID still do and the two cannot be loaded side by side.
 		public const string PluginGUID = "MVP.Valheim_Serverside_Simulations";
 		public const string PluginName = "Sarkastic.gg Dedicated Simulation";
-		public const string PluginVersion = "1.20.0";
+		public const string PluginVersion = "1.21.0";
 
 		private static ServersidePlugin context;
 		public static ServersidePlugin instance => context;
@@ -86,6 +86,7 @@ namespace Valheim_Serverside
 			availableFeatures.AddFeature(new Features.PortalLock());
 			availableFeatures.AddFeature(new Features.WardGuard());
 			availableFeatures.AddFeature(new Features.Decay());
+			availableFeatures.AddFeature(new Features.AntiCheat());
 
 			PatchRequirements patchRequirements = new PatchRequirements();
 			patchRequirements.AddRequirement(new PatchRequirement.DebugBuild());
@@ -120,6 +121,7 @@ namespace Valheim_Serverside
 				Safely(Features.PortalLock.Tick, "Portal lock");
 				Safely(Features.Decay.Tick, "Decay");
 				Safely(Features.WardGuard.Tick, "Ward guard");
+				Safely(Features.AntiCheat.Tick, "Anti-cheat");
 			}
 		}
 

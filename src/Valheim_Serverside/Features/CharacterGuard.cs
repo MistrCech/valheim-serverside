@@ -161,6 +161,11 @@ namespace Valheim_Serverside.Features
 		}
 
 		// The account (the connection's host name, as the admin list spells it) a character was last seen with, or null.
+		internal static string NameOfCharacter(long id)
+		{
+			return s_records.TryGetValue(id, out Record record) && !string.IsNullOrEmpty(record.name) ? record.name : null;
+		}
+
 		internal static string AccountOf(long id)
 		{
 			return s_records.TryGetValue(id, out Record record) && !string.IsNullOrEmpty(record.account) ? record.account : null;

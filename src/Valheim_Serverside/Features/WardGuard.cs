@@ -311,6 +311,14 @@ namespace Valheim_Serverside.Features
 			return denying == null;
 		}
 
+		// For the anti-cheat: may this player build at this place by the ward rule? True where no ward is known to say otherwise (the wards
+		// cannot be read yet). denying is the first ward that covers the place and does not have the player on its list.
+		internal static bool MayBuildAt(Vector3 at, long player, out ZDO denying)
+		{
+			denying = null;
+			return !Ready() || Allowed(at, player, out denying);
+		}
+
 		private static string NameOf(ZDO zdo)
 		{
 			return zdo == null ? "?" : ZNetScene.instance.GetPrefab(zdo.GetPrefab())?.name ?? "#" + zdo.GetPrefab();

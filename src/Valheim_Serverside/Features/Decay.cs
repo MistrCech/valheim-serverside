@@ -340,6 +340,11 @@ namespace Valheim_Serverside.Features
 		}
 
 		// A piece's full health as its game reckons it: the prefab's, raised by the world level.
+		internal static float MaxHealthOf(int prefab)
+		{
+			return MaxHealth(prefab);
+		}
+
 		private static float MaxHealth(int prefab)
 		{
 			if (!s_maxHealth.TryGetValue(prefab, out float health))

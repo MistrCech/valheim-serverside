@@ -92,6 +92,44 @@ namespace PluginConfiguration
 		public static ConfigEntry<bool> decayExemptAdmins;
 		public static ConfigEntry<bool> decayLoginMessage;
 
+		public static ConfigEntry<bool> antiCheatEnabled;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Action> antiCheatAction;
+		public static ConfigEntry<bool> antiCheatExemptAdmins;
+		public static ConfigEntry<string> antiCheatMessage;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatUnknownPrefabs;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatNotBuildable;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatCreator;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatDistance;
+		public static ConfigEntry<float> antiCheatMaxDistance;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatRate;
+		public static ConfigEntry<float> antiCheatMinInterval;
+		public static ConfigEntry<int> antiCheatRatePlants;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatItems;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatCheatMarks;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatCheatMarksOther;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatFly;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatWards;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatNoBuild;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatBiome;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatDungeon;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatCultivated;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatBurst;
+		public static ConfigEntry<int> antiCheatBurstPieces;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatHealth;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatRotation;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatFields;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatForged;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatIdentity;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatFlood;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatLevel;
+		public static ConfigEntry<int> antiCheatMaxLevel;
+		public static ConfigEntry<int> antiCheatSoftStrikes;
+		public static ConfigEntry<string> antiCheatWarnMessage;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatTeleport;
+		public static ConfigEntry<float> antiCheatTeleportMetres;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatSpeed;
+		public static ConfigEntry<float> antiCheatSpeedLimit;
+
 		public static ConfigEntry<bool> guardianStonesEnabled;
 		public static ConfigEntry<bool> welcomeEnabled;
 		public static ConfigEntry<string> welcomeTitle;
@@ -296,10 +334,94 @@ namespace PluginConfiguration
 			decayMaxRemovals = config.Bind("Decay", "MaxRemovals", 200,
 				new ConfigDescription("At most this many pieces are taken down in one pass; the rest wait for the next. Spreads the load of a big base over several passes.",
 					new AcceptableValueRange<int>(1, 5000)));
-			decayExemptAdmins = config.Bind<bool>("Decay", "ExemptAdmins", true,
-				"The characters of admins (adminlist.txt) count as always active, as do those put on the list with the console command `decay exempt <player>`, so what they built -- a spawn hub, say -- never decays: their pieces, and their ward and workbench over their own pieces. Over the pieces of others their ward or workbench holds only as long as its keepers really play. The server learns that a character is an admin when it is online, or from the character guard's record of its account; `decay exempt <id>` is the sure way.");
+			decayExemptAdmins = config.Bind<bool>("Decay", "ExemptAdmins", false,
+				"The characters of admins (adminlist.txt) count as always active, as do those put on the list with the console command `decay exempt <player>`, so what they built -- a spawn hub, say -- never decays: their pieces, and their ward and workbench over their own pieces. Over the pieces of others their ward or workbench holds only as long as its keepers really play. The server learns that a character is an admin when it is online, or from the character guard's record of its account; `decay exempt <id>` is the sure way. False (the default): nobody is exempt, admins decay like everyone else; the console command `decay exempt` still works for single characters.");
 			decayLoginMessage = config.Bind<bool>("Decay", "LoginMessage", true,
 				"Tell a player half a minute after they join about their bases: those that are decaying (first), and those that start to soon (within half their grace, at most three days). At most four lines are shown.");
+
+			antiCheatEnabled = config.Bind<bool>("AntiCheat", "Enabled", false,
+				"Look at what the players' games create and take away, and perhaps remove from the server, what the unmodified game cannot make: a plant the cultivator never plants, a piece placed far from its builder, forty seeds in one moment, a stack larger than the item allows, a character that flies, a piece in someone else's ward. The server does not see a player's mods; it sees what they leave in the world, and a game that is not modified cannot leave these. Changes take effect at the next start. See the README for what is covered, what is not, and which of the popular cheat mods leave which trace.");
+			antiCheatAction = config.Bind("AntiCheat", "Action", Valheim_Serverside.Features.AntiCheat.Action.Kick,
+				"What happens when a rule that is set to On is broken: Log (write it to the log and <world>.guard.log, nothing else), Revert (also take the object away), Kick (also tell the player what was wrong, and remove them from the server six seconds later; they may come back, and what breaks a rule is taken away again). Every rule that is set to LogOnly only writes.");
+			antiCheatExemptAdmins = config.Bind<bool>("AntiCheat", "ExemptAdmins", true,
+				"Admins (adminlist.txt) are not held to the rules: they have the console and the tools that bend them.");
+			antiCheatMessage = config.Bind<string>("AntiCheat", "Message", "Your game did something that the game itself cannot do ({0}). What it made has been taken away, and you are removed from the server. Turn off the mod that did it before you come back.",
+				"Shown in the middle of the screen of a player who is about to be kicked. {0} is what they broke. Empty: no message.");
+			antiCheatSoftStrikes = config.Bind("AntiCheat", "SoftStrikes", 2,
+				new ConfigDescription("Distance, Wards, NoBuild, Biome, Dungeon and Identity depend on the state of the server a moment after the player's game decided (a ward that was switched on just then, ground that was not loaded yet, a position the server had not caught up with, a character that had just died): the first time one of them is broken in ten minutes, the object is taken away and the player gets WarnMessage; the SoftStrikes-th time they are kicked. 1: kicked at once like for the others.",
+					new AcceptableValueRange<int>(1, 10)));
+			antiCheatWarnMessage = config.Bind<string>("AntiCheat", "WarnMessage", "That cannot be built here ({0}), and it was taken away. If it happens again you are removed from the server.",
+				"Shown in the middle of the screen of a player whose object was taken away by one of the rules that warn first (see SoftStrikes). {0} is what they broke. Empty: no message.");
+			antiCheatUnknownPrefabs = config.Bind("AntiCheat", "UnknownPrefabs", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"A player's game created an object that the server's game does not have at all (a mod that adds things to the game, a building planner's placeholders). Off, LogOnly or On.");
+			antiCheatNotBuildable = config.Bind("AntiCheat", "NotBuildable", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"An object with a creator (the game writes it when a player places a piece with the hammer, the hoe or the cultivator) that no tool of the game places: a thistle, a berry bush or an ore planted with the cultivator, a mushroom, a piece of a content mod. The tools are read from the game's own item database. Off, LogOnly or On.");
+			antiCheatCreator = config.Bind("AntiCheat", "Creator", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"The creator written on a piece is not the character that sent it. Off, LogOnly or On.");
+			antiCheatDistance = config.Bind("AntiCheat", "Distance", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"A piece placed more than MaxDistance metres from the player who placed it, both when it arrived and a moment later. Warns first, see SoftStrikes. Off, LogOnly or On.");
+			antiCheatMaxDistance = config.Bind("AntiCheat", "MaxDistance", 30f,
+				new ConfigDescription("The game places a piece within 5 m of the player's eye, a few metres more for large pieces and a few more where a piece snaps to its neighbour; the server sees the player's position a moment late. 0: no limit.",
+					new AcceptableValueRange<float>(0f, 500f)));
+			antiCheatRate = config.Bind("AntiCheat", "Rate", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"RatePlants or more plants of one player put down within MinInterval seconds of each other (a row or a grid of seeds with one press, a mod that plants as fast as it likes). Every plant carries the time at which the player's game planted it, so a slow connection does not bunch plants up. Off, LogOnly or On.");
+			antiCheatMinInterval = config.Bind("AntiCheat", "MinInterval", 0.25f,
+				new ConfigDescription("The game plants once in 0.4 s at the fastest. The time written into a plant is the game's network time, which now and then steps by a few tenths of a second, so two plants of an honest player can come out a few hundredths of a second apart (the world of this server has such pairs; no honest player has three in a quarter of a second).",
+					new AcceptableValueRange<float>(0.05f, 0.4f)));
+			antiCheatRatePlants = config.Bind("AntiCheat", "RatePlants", 3,
+				new ConfigDescription("How many plants inside MinInterval make a group the game cannot make. 2 would also catch an honest player whose network time stepped.",
+					new AcceptableValueRange<int>(2, 20)));
+			antiCheatItems = config.Bind("AntiCheat", "Items", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"An item that a player's game dropped on the ground with a stack, a quality or a durability above what the item can have (stack-size mods, spawn menus). Items in chests are not looked at; the console command `anticheat scan` lists dropped ones in the stored world. Off, LogOnly or On.");
+			antiCheatCheatMarks = config.Bind("AntiCheat", "CheatMarks", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"A creature that a player's game created with the game's own mark for cheating (the console's spawn command, which a player can only use with a mod that unlocks the console). Mods that keep the mark from being set or strip it (NoCheatedTag, CheaterBypass) get past this. Off, LogOnly or On.");
+			antiCheatCheatMarksOther = config.Bind("AntiCheat", "CheatMarksOther", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
+				"Anything else that carries the mark: a piece built from items an admin handed out is marked too, so this is only a trace by default. Off, LogOnly or On.");
+			antiCheatFly = config.Bind("AntiCheat", "Fly", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"The character's fly switch is on (the console's fly command, and the mods that fly with the hammer in hand). The game writes the switch to the character so that others see it. Off, LogOnly or On.");
+			antiCheatWards = config.Bind("AntiCheat", "Wards", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"A piece placed inside a ward that is switched on, by a player who is not the ward's owner or on its list: the game's build mode refuses it, and the check is in the player's own game. Uses the ward guard's reading of the wards; a ward that is switched off guards nothing, as in the game. Warns first, see SoftStrikes. Off, LogOnly or On.");
+			antiCheatNoBuild = config.Bind("AntiCheat", "NoBuild", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"A piece placed in a place where the game lets no one build (the sites of the bosses' altars and the like). Warns first, see SoftStrikes. Off, LogOnly or On.");
+			antiCheatBiome = config.Bind("AntiCheat", "Biome", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"A piece that belongs to one biome (a few do) placed in another; not judged where the server has not got the ground loaded. Warns first, see SoftStrikes. Off, LogOnly or On.");
+			antiCheatDungeon = config.Bind("AntiCheat", "Dungeon", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"A piece that may not be built in a dungeon (most may not), built in one. The world modifier that allows building in dungeons is honoured; the game's other exception, an environment in which building is allowed, had no entries in the 1.0.20 server's data when this was written. Warns first, see SoftStrikes. Off, LogOnly or On.");
+			antiCheatCultivated = config.Bind("AntiCheat", "Cultivated", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
+				"A crop put on ground that is not cultivated. LogOnly by default: the server has the ground only near players and a moment behind, so an honest planter right after hoeing can be caught out. Off, LogOnly or On.");
+			antiCheatBurst = config.Bind("AntiCheat", "Burst", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
+				"BurstPieces or more pieces (not plants) from one player in three seconds: more than the game places in that time (one in 0.4 s). LogOnly by default: a connection that stalls and then delivers everything at once looks the same. Off, LogOnly or On.");
+			antiCheatBurstPieces = config.Bind("AntiCheat", "BurstPieces", 15,
+				new ConfigDescription("How many pieces in three seconds make a burst.",
+					new AcceptableValueRange<int>(2, 200)));
+			antiCheatHealth = config.Bind("AntiCheat", "Health", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
+				"A piece with more health than its prefab can have (indestructible pieces of the build-anything hammers). LogOnly by default: skill and building mods make pieces tougher on purpose. Off, LogOnly or On.");
+			antiCheatRotation = config.Bind("AntiCheat", "Rotation", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
+				"A piece turned in a way the build mode does not offer: tilted, or not in a multiple of 22.5 degrees about the vertical (the free-rotation mods). LogOnly by default: it breaks nothing but the look. Off, LogOnly or On.");
+
+			antiCheatFields = config.Bind("AntiCheat", "Fields", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"An object that a player's game created with per-object field overrides (the key HasFields: invulnerable, invisible, enormous). The game writes it for one thing only, the console's spawn command given component fields, which the build-anything admin hammers use as well. A plain spawn does not write it. Off, LogOnly or On.");
+			antiCheatForged = config.Bind("AntiCheat", "Forged", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"An object that arrived from one player's game with an id that carries the session of another game. The game always makes its objects under its own session; a modified game can write someone else's, to have its work put on them. Judged by the connection it arrived on, so the one who is acted on is the sender. Off, LogOnly or On.");
+			antiCheatIdentity = config.Bind("AntiCheat", "Identity", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"A game that names as its own a character that another game made, or that sends a piece (an object with a creator) while it has no character at all. The game's character is made by the game that plays it, and a piece can only be placed by a character. Off, LogOnly or On.");
+			antiCheatFlood = config.Bind("AntiCheat", "Flood", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"A game that has thousands of objects waiting to be looked at: more than the game makes in minutes. The objects past the limit are not looked at (a game cannot be allowed to hide its work among junk), and the player is acted on. Nothing is taken away. Off, LogOnly or On.");
+			antiCheatLevel = config.Bind("AntiCheat", "Level", Valheim_Serverside.Features.AntiCheat.Mode.On,
+				"A creature that a player's game created with a level above MaxLevel (spawn menus let a player type any level). A player's game does create creatures now and then (the skeletons of a staff, the offspring of tamed animals), but none of those is above the levels the game gives its spawns. Off, LogOnly or On.");
+			antiCheatMaxLevel = config.Bind("AntiCheat", "MaxLevel", 10,
+				new ConfigDescription("The highest level of a creature that is let through. The game makes up to three stars (level 4); the world's modifiers add a little.",
+					new AcceptableValueRange<int>(2, 1000)));
+			antiCheatTeleport = config.Bind("AntiCheat", "Teleport", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
+				"A character that moved TeleportMetres or more in a few seconds with no portal within 20 m of either end, and neither end in a dungeon (the map-click teleport mods). LogOnly by default: the check is new and the game has more ways to move a player than a portal. Off, LogOnly or On.");
+			antiCheatTeleportMetres = config.Bind("AntiCheat", "TeleportMetres", 250f,
+				new ConfigDescription("How far a character must have moved between two looks (two seconds apart) to be a teleport. The fastest ship under the best wind makes about 15 m/s.",
+					new AcceptableValueRange<float>(50f, 5000f)));
+			antiCheatSpeed = config.Bind("AntiCheat", "Speed", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
+				"A character that moved faster than SpeedLimit metres a second, sideways, in two looks in a row. LogOnly by default. Off, LogOnly or On.");
+			antiCheatSpeedLimit = config.Bind("AntiCheat", "SpeedLimit", 30f,
+				new ConfigDescription("Metres per second. A run is 7, a ship under a good wind 15; the mods that speed a player up on paths (SpeedyPaths: 1.4 times) stay well under this and are not caught by it.",
+					new AcceptableValueRange<float>(10f, 200f)));
 
 			guardianStonesEnabled = config.Bind<bool>("GuardianStones", "Enabled", false,
 				"Show a boss's trophy on its guardian stone, and so offer its power, only to players who have beaten that boss themselves, as their own client's raid list shows it (the same reading as the night spawn guard). To everyone else's game the stone is empty: a vanilla client cannot take a power it cannot see, and the server could not take one back. Players who may not use a stone cannot hang a trophy on it either.");

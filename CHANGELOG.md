@@ -1,3 +1,39 @@
+## [1.21.0] - 2026-10-17
+
+### Added
+
+- `[AntiCheat]` (off by default; `Action` Log / Revert / Kick, default Kick): the server looks at every object a player's
+  game creates (`ZDOMan.RPC_ZDOData`; whose it is, is the connection it came in on, not the id it carries) at least 1.2 s
+  after it arrives, and acts on what the unmodified game cannot make. Rules, each Off / LogOnly / On, with their defaults:
+  On: `UnknownPrefabs` (an object the server's game does not have), `NotBuildable` (a creator on something no build table
+  of the game contains and no item's attack puts down: a thistle, berry bush, mushroom or ore planted with the
+  cultivator), `Forged` (an id with another game's session in it, or a write to another game's character), `Identity` (a
+  game that names another's character as its own, or sends a piece with no character), `Creator` (not the sender's),
+  `Distance` (a piece more than `MaxDistance` 30 m from the player, at arrival and a moment later), `Rate` (`RatePlants` 3
+  plants within `MinInterval` 0.25 s: rows and grids with one press; set from the real planting times of three players
+  of the live world), `Items` (a dropped item with a stack, durability or quality above the maximum), `CheatMarks` (a
+  creature with the game's cheating mark), `Fields` (`HasFields`, which the game writes only for the console's `spawn`
+  given component fields), `Fly` (the character's debug-fly switch), `Flood` (thousands of objects waiting from one
+  player), `Level` (a creature above `MaxLevel` 10), `Wards` (a piece in a switched-on ward by a player not on its list,
+  by the ward guard's rule), `NoBuild`, `Biome`, `Dungeon`. LogOnly: `CheatMarksOther` (other objects, and items, with the
+  mark), `Cultivated`, `Burst`, `Health`, `Rotation`, `Teleport` (250 m in two seconds with no portal near), `Speed`
+  (30 m/s). `Distance`, `Wards`, `NoBuild`, `Biome`, `Dungeon` and `Identity` depend on the server's state a moment after
+  the player's game decided and warn first (`SoftStrikes` 2, `WarnMessage`): the first time in ten minutes the object is
+  taken away and the player told, the second they are kicked. Admins are not held to the rules (`ExemptAdmins`). An object
+  another game has written to meanwhile is judged but nobody is blamed for it; a character another game has written to is
+  left out of the rules. Findings go to the log and `<world>.guard.log` (`AntiCheat: ...`, at most 120 lines a minute).
+- Console command `anticheat` (what was found since the start), `anticheat scan` (the stored world: what no tool of the
+  game makes, dropped items and chests above the maximum, plants put down in groups, biome and dungeon; who made what) and
+  `anticheat revert [all]` (takes away only what no tool of the game makes and dropped items above the maximum: never the
+  contents of a chest, a piece in the wrong biome or a dungeon, or an object the game does not have, and it spares the
+  pieces of admins and, unless `all` is said, of makers the character guard does not know).
+- README: the rules, how to roll them out, what they cannot see, and what 20 of the most downloaded cheat and tweak mods
+  leave in the world and which rule sees it (from their READMEs and, for the 20, their decompiled code).
+
+### Changed
+
+- `[Decay] ExemptAdmins` is false by default (was true): nobody is exempt from decay unless named with `decay exempt`.
+
 ## [1.20.0] - 2026-10-16
 
 ### Added
