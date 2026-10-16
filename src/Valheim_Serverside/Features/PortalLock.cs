@@ -32,6 +32,13 @@ namespace Valheim_Serverside.Features
 		- where no ward holds either end, the builders of the two ends.
 		A portal nobody has built (admin-spawned, no ward) is open, as in the game.
 
+		Where a public portal may not stand (KeepClear, KeepClearRadius): within so many metres, sideways, of the
+		place of the spawn (the start temple), a boss altar or a trader (Haldor, Hildir, the Bog Witch), by default
+		-- the places of every such location the world has, a trader's other possible places included. A portal a
+		player built there does not count as public: it is used by its builder and the ward's list, whatever its name
+		starts with; and its name cannot be changed to a public one (the request is refused and the builder told).
+		A portal nobody built (admin-spawned) is not held to it, so a hub at the spawn is the admin's to make.
+
 		How it is kept:
 		- A player who may not use a pair is sent the portal's ZDO with the connection set to "none" in the
 		  data of that one call (ZDOMan.SendZDOs -> ZDO.Serialize) and put back right after: to their game
@@ -78,6 +85,8 @@ namespace Valheim_Serverside.Features
 		// Unconnected portals that had a partner of the same name they may not be paired with, and when.
 		private static readonly Dictionary<ZDOID, float> s_unlinked = new Dictionary<ZDOID, float>();
 		private static readonly List<int> s_permittedKeys = new List<int>();
+		// The places where a public portal may not stand (location name, position), read from the world's locations every scan.
+		private static List<KeyValuePair<string, Vector3>> s_keepClear = new List<KeyValuePair<string, Vector3>>();
 		private static readonly int s_setTag = "RPC_SetTag".GetStableHashCode();
 		private static readonly MethodInfo s_isConnecting = AccessTools.Method(typeof(Game), "IsCurrentlyConnectingPortal");
 		private static ZNetPeer s_sendingTo;
@@ -141,6 +150,61 @@ namespace Valheim_Serverside.Features
 			}
 			s_portalIds = portals;
 			s_wardIds = wards;
+			ScanKeepClear();
+		}
+
+		private static float KeepClearRadius => Mathf.Max(0f, Configuration.portalLockKeepClearRadius.Value);
+
+		private static void ScanKeepClear()
+		{
+			HashSet<string> names = new HashSet<string>(Configuration.portalLockKeepClear.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0));
+			List<KeyValuePair<string, Vector3>> places = new List<KeyValuePair<string, Vector3>>();
+			if (names.Count > 0 && KeepClearRadius > 0f && ZoneSystem.instance != null)
+			{
+				foreach (ZoneSystem.LocationInstance location in ZoneSystem.instance.GetLocationList())
+				{
+					if (location.m_location != null && names.Contains(location.m_location.m_prefabName))
+					{
+						places.Add(new KeyValuePair<string, Vector3>(location.m_location.m_prefabName, location.m_position));
+					}
+				}
+			}
+			if (places.Count == 0 && names.Count > 0 && KeepClearRadius > 0f && ZoneSystem.instance != null && ZoneSystem.instance.LocationsGenerated && s_logged.Add("pair/keepclear/none"))
+			{
+				ServersidePlugin.logger.LogWarning($"Portal lock: KeepClear names {string.Join(", ", names)} but the world has no such location: no public portal is kept clear of anything");
+			}
+			if (places.Count != s_keepClear.Count && s_logged.Add($"pair/keepclear/{places.Count}"))
+			{
+				ServersidePlugin.logger.LogInfo($"Portal lock: a public portal may not stand within {KeepClearRadius:0.#} m of {places.Count} place(s): "
+					+ string.Join(", ", places.GroupBy(k => k.Key).OrderBy(g => g.Key).Select(g => g.Key + " x" + g.Count())));
+			}
+			s_keepClear = places;
+		}
+
+		// The name of the place a public portal at this spot may not be near, or null.
+		private static string KeepClearNear(Vector3 at)
+		{
+			float radius = KeepClearRadius;
+			if (radius <= 0f)
+			{
+				return null;
+			}
+			foreach (KeyValuePair<string, Vector3> place in s_keepClear)
+			{
+				float dx = place.Value.x - at.x;
+				float dz = place.Value.z - at.z;
+				if (dx * dx + dz * dz < radius * radius)
+				{
+					return place.Key;
+				}
+			}
+			return null;
+		}
+
+		private static bool IsPublicName(string tag)
+		{
+			string prefix = Configuration.portalLockPublicPrefix.Value;
+			return !string.IsNullOrEmpty(prefix) && !string.IsNullOrEmpty(tag) && tag.StartsWith(prefix, StringComparison.Ordinal);
 		}
 
 		private static bool IsPortal(ZDO zdo)
@@ -246,6 +310,14 @@ namespace Valheim_Serverside.Features
 				}
 			}
 			end.publicTag = star && (end.list == null || builtByWardOwners);
+			if (end.publicTag && end.creator != 0L && KeepClearNear(at) != null)
+			{
+				end.publicTag = false;
+				if (s_logged.Add($"pair/keepclear/portal/{portal.m_uid}"))
+				{
+					ServersidePlugin.logger.LogInfo($"Portal lock: the portal named '{portal.GetString(ZDOVars.s_tag, "")}' at {Where(portal)} (built by {end.creator}) stands within {KeepClearRadius:0.#} m of {KeepClearNear(at)}; it does not count as public");
+				}
+			}
 			end.ownerless = end.creator == 0L && end.list == null;
 			return end;
 		}
@@ -455,7 +527,7 @@ namespace Valheim_Serverside.Features
 		[HarmonyPatch(typeof(TeleportWorld), "RPC_SetTag")]
 		public static class TeleportWorld_RPC_SetTag_Patch
 		{
-			static bool Prefix(TeleportWorld __instance, long sender)
+			static bool Prefix(TeleportWorld __instance, long sender, string tag)
 			{
 				if (!Configuration.portalLockEnabled.Value || !ZNet.instance || !ZNet.instance.IsServer())
 				{
@@ -466,12 +538,16 @@ namespace Valheim_Serverside.Features
 					ZNetView view = __instance.m_nview;
 					ZDO zdo = view && view.IsValid() ? view.GetZDO() : null;
 					ZNetPeer peer = ZNet.instance.GetPeer(sender);
-					if (!Ready() || zdo == null || peer == null || MayManage(zdo, peer))
+					if (!Ready() || zdo == null || peer == null)
 					{
 						return true;
 					}
-					Refuse(peer, zdo, "change its name");
-					return false;
+					if (!MayManage(zdo, peer))
+					{
+						Refuse(peer, zdo, "change its name");
+						return false;
+					}
+					return !RefuseKeepClear(peer, zdo, tag);
 				}
 				catch (Exception e)
 				{
@@ -496,12 +572,16 @@ namespace Valheim_Serverside.Features
 				{
 					ZDO zdo = ZDOMan.instance.GetZDO(rpcData.m_targetZDO);
 					ZNetPeer peer = ZNet.instance.GetPeer(rpcData.m_senderPeerID);
-					if (!Ready() || !IsPortal(zdo) || peer == null || MayManage(zdo, peer))
+					if (!Ready() || !IsPortal(zdo) || peer == null)
 					{
 						return true;
 					}
-					Refuse(peer, zdo, "change its name");
-					return false;
+					if (!MayManage(zdo, peer))
+					{
+						Refuse(peer, zdo, "change its name");
+						return false;
+					}
+					return !RefuseKeepClear(peer, zdo, new ZPackage(rpcData.m_parameters.GetArray()).ReadString());
 				}
 				catch (Exception e)
 				{
@@ -715,6 +795,35 @@ namespace Valheim_Serverside.Features
 			{
 				ServersidePlugin.logger.LogInfo($"Portal lock: {peer.m_playerName} is told at the portal at {Where(portal)} ({kind})");
 			}
+		}
+
+		// A player-built portal in a keep-clear place is not given a public name.
+		private static bool RefuseKeepClear(ZNetPeer peer, ZDO portal, string tag)
+		{
+			if (!IsPublicName(tag) || portal.GetLong(ZDOVars.s_creator, 0L) == 0L)
+			{
+				return false;
+			}
+			string near = KeepClearNear(portal.GetPosition());
+			if (near == null)
+			{
+				return false;
+			}
+			if (s_logged.Add($"rpc/{peer.m_uid}/{portal.m_uid}/keepclear"))
+			{
+				ServersidePlugin.logger.LogInfo($"Portal lock: {peer.m_playerName} may not give the portal at {Where(portal)} a public name ('{tag}'): it stands within {KeepClearRadius:0.#} m of {near}; not passed on");
+			}
+			string message = Configuration.portalLockKeepClearMessage.Value ?? "";
+			try
+			{
+				message = string.Format(message, KeepClearRadius.ToString("0.#"));
+			}
+			catch (FormatException)
+			{
+				// a stray brace in the configured text: show it as written
+			}
+			Say(peer, portal, "keepclear", message);
+			return true;
 		}
 
 		private static void Refuse(ZNetPeer peer, ZDO portal, string what)

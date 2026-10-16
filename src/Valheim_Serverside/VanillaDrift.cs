@@ -49,6 +49,9 @@ namespace Valheim_Serverside
 			{ AccessTools.Method(typeof(ZNetScene), "OutsideActiveArea", new[] { typeof(UnityEngine.Vector3) }), new[] {
 				"ZNet::GetReferencePosition", "ZNet::get_instance", "ZNetScene::OutsideActiveArea", "ZoneSystem::GetZone",
 			} },
+			// Not replaced, but read by hand: the ward guard parses the routed RPC packet and keys on RPC names.
+			{ AccessTools.Method(typeof(ZRoutedRpc), "RPC_RoutedRPC"), new[] { "RoutedRPCData::.ctor", "RoutedRPCData::Deserialize", "ZRoutedRpc::HandleRoutedRPC", "ZRoutedRpc::RouteRPC" } },
+			{ AccessTools.Method(typeof(ZRoutedRpc.RoutedRPCData), "Deserialize"), new[] { "ZPackage::ReadInt", "ZPackage::ReadLong", "ZPackage::ReadPackage", "ZPackage::ReadZDOID" } },
 			{ AccessTools.Method(typeof(Ship), "UpdateOwner"), new[] {
 				"Ship::GetNewOwnerID", "Ship::IsPlayerInBoat", "Ship::RefreshPlayerList", "ZDO::SetOwner",
 				"ZLog::Log", "ZNetView::GetZDO", "ZNetView::IsOwner", "ZNetView::IsValid",

@@ -1,4 +1,4 @@
-﻿using BepInEx;
+﻿﻿﻿using BepInEx;
 using BepInEx.Logging;
 using FeaturesLib;
 using HarmonyLib;
@@ -23,7 +23,7 @@ namespace Valheim_Serverside
 		// detect it by GUID still do and the two cannot be loaded side by side.
 		public const string PluginGUID = "MVP.Valheim_Serverside_Simulations";
 		public const string PluginName = "Sarkastic.gg Dedicated Simulation";
-		public const string PluginVersion = "1.18.0";
+		public const string PluginVersion = "1.19.0";
 
 		private static ServersidePlugin context;
 		public static ServersidePlugin instance => context;
@@ -84,6 +84,7 @@ namespace Valheim_Serverside
 			availableFeatures.AddFeature(new Features.GuardianStones());
 			availableFeatures.AddFeature(new Features.LocationIcons());
 			availableFeatures.AddFeature(new Features.PortalLock());
+			availableFeatures.AddFeature(new Features.WardGuard());
 
 			PatchRequirements patchRequirements = new PatchRequirements();
 			patchRequirements.AddRequirement(new PatchRequirement.DebugBuild());

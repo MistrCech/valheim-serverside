@@ -1,3 +1,34 @@
+## [1.19.0] - 2026-10-16
+
+### Added
+
+- `[WardGuard]` (off by default): the game's ward enforced by the server. Every check of a ward is made in the
+  acting player's own game, nothing checks it when a piece is hit (the ward only flashes), and smelters, kilns,
+  cooking stations, fireplaces, beds and crops have no check at all. Now every routed RPC a client sends is looked
+  at in `ZRoutedRpc.RPC_RoutedRPC` on the server and judged, by the player the connection belongs to, with the
+  game's own rule: where an enabled ward covers the place, only its owner and the players on its list may act.
+  `Structures`: hitting, taking down and repairing a player's build piece (and the ward itself) is dropped, the ward
+  flashes and the player is told; a hit with no attacker or by a creature the sender's game owns is not a player's
+  and is not touched. `Interactions`: chests and doors with the guard stone flag, stands, fermenters, beehives,
+  incinerators, the map table, and taking the product out of smelters and cooking stations, switching a fireplace
+  off, claiming a bed and picking planted crops; a chest asked to open answers no; putting something in, and traps,
+  are left alone (the player's game has already used the item up; the same request is sent when something steps on
+  a trap). `Spoofing`: a packet whose sender id is not its connection, and a ward's `ToggleEnabled` /
+  `TogglePermitted` for another player's id, are dropped. `DestroyRequests` (LogOnly by default): requests to
+  destroy what the sender's game does not own are counted and logged, or taken out. Refusals go to
+  `<world>.guard.log`. The startup drift check watches `ZRoutedRpc.RPC_RoutedRPC` and `RoutedRPCData.Deserialize`, which
+  the guard reads by hand. Tested with three simulated players on a copy of the live world, with the guard off for
+  comparison, and with a real Valheim 1.0.20 client hitting a warded wall (untouched while off the list, hit once on it; with the guard off it was taken down). See the README.
+- `[PortalLock] KeepClear` / `KeepClearRadius` / `KeepClearMessage`: no public portal within 100 m (sideways) of the
+  start temple, a boss altar or a trader (Haldor, Hildir, the Bog Witch; every place the world has for each). A
+  player-built portal there does not count as public and cannot be given a public name; admin-spawned portals are
+  not held to it. Portals that were public there stop being public; the log names each.
+
+### Changed
+
+- Updated for Valheim 1.0.20 (the game's own code the mod depends on is unchanged from 1.0.16). The startup check
+  still passes. Plugin version 1.19.0.
+
 ## [1.18.3] - 2026-10-12
 
 ### Changed

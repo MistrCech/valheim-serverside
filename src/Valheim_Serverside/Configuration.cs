@@ -1,4 +1,4 @@
-﻿using BepInEx.Configuration;
+﻿﻿﻿﻿using BepInEx.Configuration;
 
 namespace PluginConfiguration
 {
@@ -63,6 +63,18 @@ namespace PluginConfiguration
 		public static ConfigEntry<float> portalLockExtraReach;
 		public static ConfigEntry<string> portalLockMessage;
 		public static ConfigEntry<string> portalLockPairingMessage;
+		public static ConfigEntry<string> portalLockKeepClear;
+		public static ConfigEntry<float> portalLockKeepClearRadius;
+		public static ConfigEntry<string> portalLockKeepClearMessage;
+
+		public static ConfigEntry<bool> wardGuardEnabled;
+		public static ConfigEntry<Valheim_Serverside.Features.WardGuard.Mode> wardGuardStructures;
+		public static ConfigEntry<Valheim_Serverside.Features.WardGuard.Mode> wardGuardInteractions;
+		public static ConfigEntry<Valheim_Serverside.Features.WardGuard.Mode> wardGuardSpoofing;
+		public static ConfigEntry<Valheim_Serverside.Features.WardGuard.Mode> wardGuardDestroyRequests;
+		public static ConfigEntry<bool> wardGuardExemptAdmins;
+		public static ConfigEntry<bool> wardGuardFlash;
+		public static ConfigEntry<string> wardGuardMessage;
 		public static ConfigEntry<bool> guardianStonesEnabled;
 		public static ConfigEntry<bool> welcomeEnabled;
 		public static ConfigEntry<string> welcomeTitle;
@@ -205,6 +217,30 @@ namespace PluginConfiguration
 				"Shown in the middle of the screen of a player who stands at a portal they may not use, or tries to rename one, at most once a quarter of an hour per portal. Empty: no message.");
 			portalLockPairingMessage = config.Bind<string>("PortalLock", "PairingMessage", "No portal of this name can be linked to yours: its builder has to be on a ward next to your portal, or you on one next to theirs.",
 				"Shown to the builder standing at an unconnected portal that has a partner of the same name it may not be paired with, at most once a quarter of an hour per portal. Empty: no message.");
+
+			portalLockKeepClear = config.Bind<string>("PortalLock", "KeepClear", "StartTemple,Eikthyrnir,GDKing,Bonemass,Dragonqueen,GoblinKing,Mistlands_DvergrBossEntrance1,FaderLocation,DN_Bossroom,Vendor_BlackForest,Hildir_camp,BogWitch_Camp",
+				"Locations (prefab names, comma separated) near which a player may not have a public portal: the spawn (the start temple), the boss altars, the traders. Every place the world has for each counts, the traders' other possible places included. Empty: none.");
+			portalLockKeepClearRadius = config.Bind<float>("PortalLock", "KeepClearRadius", 100f,
+				"How far, in metres sideways, from the place of any location in KeepClear a public portal may not stand. A player-built portal there does not count as public (its builder and the ward's list use it) and cannot be given a public name; a portal nobody built (admin-spawned) is not held to it. 0: the rule is off.");
+			portalLockKeepClearMessage = config.Bind<string>("PortalLock", "KeepClearMessage", "A public portal cannot stand within {0} m of the spawn, a boss altar or a trader. Name it without the public prefix, or move it.",
+				"Shown in the middle of the screen of a player whose portal is refused a public name there. {0} is the radius. Empty: no message.");
+
+			wardGuardEnabled = config.Bind<bool>("WardGuard", "Enabled", false,
+				"Make the server enforce the ward (guard stone). In the game every check of a ward is made in the acting player's own game, nothing stops a weapon from damaging a warded build (the ward only flashes), and smelters, cooking stations, fireplaces, crops, beds and stands have no ward check at all. Here the server judges the RPCs players' games send it, by the player the connection belongs to and the game's own rule: where an enabled ward covers the place, the owner of the ward and the players on its list may act, nobody else. Admins, creatures of a raid and anything the game does by itself are not touched. Every refusal is written to <world>.guard.log. Needs a restart to switch on (the patches are applied at startup); switching it off takes effect at once. See the README.");
+			wardGuardStructures = config.Bind("WardGuard", "Structures", Valheim_Serverside.Features.WardGuard.Mode.On,
+				"Hitting, taking down with the hammer and repairing a player's build piece (anything with a creator, and the ward itself) inside an enabled ward by a player who is not on its list: On drops it (the ward flashes and the player is told), LogOnly only writes it to the guard log, Off does nothing. A hit with no attacker (fire, a falling object) or by a creature that the sender's game owns is not a player's and is not touched.");
+			wardGuardInteractions = config.Bind("WardGuard", "Interactions", Valheim_Serverside.Features.WardGuard.Mode.On,
+				"The same for what a ward is meant to keep out: opening chests, doors, using item and armour stands, fermenters, beehives, sap collectors, incinerators, writing on the map table -- and what the game does not guard at all: taking the product out of a smelter, kiln or cooking station, switching a fireplace off, claiming a bed, picking planted crops. Putting something in (ore, fuel, food, ammo) is not guarded -- the player's game has already used the item up when it asks -- and neither are traps (the same request is sent when something steps on one). A chest that is refused answers the player no, as it does when it is in use.");
+			wardGuardSpoofing = config.Bind("WardGuard", "Spoofing", Valheim_Serverside.Features.WardGuard.Mode.On,
+				"An RPC whose sender id is not the connection it arrived on is dropped (the game's own client always sends its own id), and so are a ward's ToggleEnabled and TogglePermitted for a player id other than the sender's own: with them a modified game switches off someone's ward or puts itself on its list. LogOnly writes them to the guard log and lets them through. Admins are not exempt from this.");
+			wardGuardDestroyRequests = config.Bind("WardGuard", "DestroyRequests", Valheim_Serverside.Features.WardGuard.Mode.LogOnly,
+				"The game asks the server to destroy only what it owns itself, so a request for an object that another game or the server owns is what a modified game sends to take a build away. LogOnly counts them and writes a summary to the log (left in); On takes them out of the request. Leave it in LogOnly until the log shows what the honest clients send: the game claims an object and destroys it in the same frame (the hammer on a piece that is not a WearNTear, picking up, harvesting), and the claim can reach the server after the request. Admins are not exempt from this.");
+			wardGuardExemptAdmins = config.Bind<bool>("WardGuard", "ExemptAdmins", true,
+				"Admins (adminlist.txt) are not held to any ward.");
+			wardGuardFlash = config.Bind<bool>("WardGuard", "Flash", true,
+				"The ward flashes (the game's own shield effect, every player near sees it) when it refuses something, at most every 3 seconds.");
+			wardGuardMessage = config.Bind<string>("WardGuard", "Message", "This place is under a ward. Ask its owner to put you on the ward's list.",
+				"Shown in the middle of the screen of a player the ward refused, at most every 15 seconds. Empty: no message.");
 
 			guardianStonesEnabled = config.Bind<bool>("GuardianStones", "Enabled", false,
 				"Show a boss's trophy on its guardian stone, and so offer its power, only to players who have beaten that boss themselves, as their own client's raid list shows it (the same reading as the night spawn guard). To everyone else's game the stone is empty: a vanilla client cannot take a power it cannot see, and the server could not take one back. Players who may not use a stone cannot hang a trophy on it either.");
