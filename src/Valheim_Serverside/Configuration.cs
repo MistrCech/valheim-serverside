@@ -20,6 +20,7 @@ namespace PluginConfiguration
 		public static ConfigEntry<string> cpuAffinity;
 		public static ConfigEntry<string> processPriority;
 		public static ConfigEntry<int> messageLineLength;
+		public static ConfigEntry<float> messageSecondsPerLine;
 
 		public static ConfigEntry<int> sendIntervalMs;
 		public static ConfigEntry<int> maxCatchUpMs;
@@ -172,11 +173,11 @@ namespace PluginConfiguration
 				"Every this many minutes, log per player how often their send queue was full. 0 disables.");
 
 			consoleCommandsEnabled = config.Bind<bool>("Server", "ConsoleCommands", true,
-				"Read commands from standard input: save, stop, players, give <item> <amount> <player>, broadcast <text>, event <name> <player>, events, help; anything else goes to the game's own console (kick, ban, unban, banned, stopevent, devcommands, skiptime ...). In AMP set App.HasWriteableConsole=True to type them into its console, and App.ExitMethod=String with App.ExitString=stop to shut down cleanly. On Windows also set [Logging.Console] Enabled = false in BepInEx.cfg, or BepInEx's own console takes over standard input.");
+				"Read commands from standard input: save, stop, players, give <item> <amount> <player>, broadcast <text> (in it \\n is a line break and \\u010d the letter with that code, whatever the panel does to accents; \\\\ is a backslash), event <name> <player>, events, help; anything else goes to the game's own console (kick, ban, unban, banned, stopevent, devcommands, skiptime ...). In AMP set App.HasWriteableConsole=True to type them into its console, and App.ExitMethod=String with App.ExitString=stop to shut down cleanly. On Windows also set [Logging.Console] Enabled = false in BepInEx.cfg, or BepInEx's own console takes over standard input.");
 			maxGiveAmount = config.Bind<int>("Server", "MaxGiveAmount", 1000,
 				"Most items one give command may drop.");
-			consoleInputCodePage = config.Bind<int>("Server", "ConsoleInputCodePage", 1250,
-				new ConfigDescription("How to read a console line that is not valid UTF-8 (UTF-8 is always tried first). Panels on Windows may write their code page instead: 1250 Central European (Czech), 852 Central European DOS, 1252 Western, 65001 UTF-8 only. The log says which bytes arrived the first time this is needed.",
+			consoleInputCodePage = config.Bind<int>("Server", "ConsoleInputCodePage", 852,
+				new ConfigDescription("How to read a console line that is not valid UTF-8 (UTF-8 is always tried first). Panels on Windows write their OEM code page instead: AMP was seen writing 850 (Western), whose á é í ó ú ý and their capitals have the same bytes in 852 (Central European DOS), so 852 reads them right; the letters 850 lacks (č ď ě ň ř š ť ů ž) are already plain ones when the line arrives, and broadcast takes them as \\u010d (see ConsoleCommands). Also 1250 Central European (Windows), 1252 Western, 65001 UTF-8 only. The log says which bytes arrived the first time this is needed.",
 					new AcceptableValueList<int>(1250, 852, 1252, 65001)));
 			unityJobWorkers = config.Bind<int>("Server", "UnityJobWorkers", 8,
 				"Upper limit on Unity job worker threads. Unity starts one per CPU core, and on many-core hosts the idle ones still use CPU. Only ever lowers the count. 0 leaves Unity's default.");
@@ -185,6 +186,9 @@ namespace PluginConfiguration
 			messageLineLength = config.Bind<int>("Server", "MessageLineLength", 50,
 				new ConfigDescription("Longest line, in characters, of a message the server puts in the middle of a player's screen (anti-cheat, wards, portals, the welcome, broadcasts); messages in the top left corner, in letters half as big, take twice as many. The game never wraps them, so a longer line ran off both sides of the screen: a line of 50 characters takes at most about 930 of the screen's 1920 units at the default GUI scale. Broken at spaces; 0 leaves every message on one line.",
 					new AcceptableValueRange<int>(0, 1000)));
+			messageSecondsPerLine = config.Bind<float>("Server", "MessageSecondsPerLine", 3f,
+				new ConfigDescription("How long a message in the middle of a player's screen is held, for each line of it (see MessageLineLength; at most 30 seconds in all). The game fades such a message out over 4 seconds from the moment it arrives, so one of several lines was half gone before it was read. The server sends it again every second for this long, so it stays as bright as at first. Each repeat is one more entry in the player's message log (Compendium, Logs), which keeps the last 50. A kick that follows a message (anti-cheat, character guard) waits until the message has been held. 0: shown once, as the game does.",
+					new AcceptableValueRange<float>(0f, 10f)));
 			processPriority = config.Bind<string>("Server", "ProcessPriority", "Normal",
 				new ConfigDescription("Priority of the server process against everything else on the host: Normal (as before), AboveNormal or High. When the host is busy, a higher priority lets the server's frames go first. Needs a restart.",
 					new AcceptableValueList<string>("Normal", "AboveNormal", "High")));

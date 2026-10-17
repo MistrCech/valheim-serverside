@@ -9,7 +9,8 @@ namespace Valheim_Serverside
 	/*
 		Commands read from the server's standard input.
 
-		Own commands: `save`, `stop`, `players`, `give <item> <amount> <player>`, `broadcast <text>`,
+		Own commands: `save`, `stop`, `players`, `give <item> <amount> <player>`, `broadcast <text>` (`\n` is a line break and
+		`\u010d` the letter with that code, for a panel that passes nothing but ASCII and an old code page),
 		`event <name> <player>`, `events`, `characters`, `allow <character>`, `decay ...` (base decay), `anticheat ...`, `help`. Anything else is passed to the game's own console
 		(the Terminal a dedicated server has but never reads), so the vanilla server commands work
 		too: `kick`, `ban`, `unban`, `banned`, `stopevent`, `randomevent`, `setkey`, `removekey`, and
@@ -157,7 +158,7 @@ namespace Valheim_Serverside
 						}
 						else
 						{
-							Reply(AdminCommands.Broadcast(command.Substring(words[0].Length).Trim(), "console"));
+							Reply(AdminCommands.Broadcast(PlayerMessages.Unescape(command.Substring(words[0].Length).Trim()), "console"));
 						}
 						break;
 					case "event":

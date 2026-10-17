@@ -1667,12 +1667,10 @@ namespace Valheim_Serverside.Features
 
 		private static void Schedule(ZNetPeer peer, long user, string why)
 		{
-			s_kickAt[user] = Time.time + KickDelaySeconds;
 			string message = (Configuration.antiCheatMessage.Value ?? "").Replace("{0}", why);
-			if (message.Length > 0)
-			{
-				PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, message);
-			}
+			float held = message.Length > 0 ? PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, message) : 0f;
+			// The kick waits until the message has been held, so that it can be read to its end.
+			s_kickAt[user] = Time.time + Mathf.Max(KickDelaySeconds, held);
 		}
 
 		private static void RunKicks()

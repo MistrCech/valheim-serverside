@@ -66,7 +66,8 @@ namespace Valheim_Serverside
 			{
 				noticed = true;
 				notice = $"Console input is not UTF-8 (bytes: {BitConverter.ToString(data).Replace("-", " ")}); decoded with code page {codePage}."
-					+ " If accents come out wrong, set [Server] ConsoleInputCodePage to what the panel sends (1250, 852, 1252 or 65001).";
+					+ " If accents come out wrong, set [Server] ConsoleInputCodePage to what the panel sends (852, 1250, 1252 or 65001)."
+					+ " AMP on a Western Windows writes its OEM code page 850, which 852 reads right for á é í ó ú ý, but it has no č ď ě ň ř š ť ů ž, and those arrive as plain letters: write them as \\u010d in a broadcast.";
 			}
 			handler(text, notice);
 		}

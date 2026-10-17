@@ -407,10 +407,10 @@ namespace Valheim_Serverside.Features
 				ServersidePlugin.logger.LogWarning("Character guard: " + what);
 				return;
 			}
-			ServersidePlugin.logger.LogWarning($"Character guard: {what}. Kicking in {KickDelaySeconds:0} s; `allow {peer.m_playerName}` in the console lets this character in.");
-			// A vanilla client shows this in the middle of the screen; the kick follows so it can be read.
-			PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, message);
-			session.kickAt = Time.time + KickDelaySeconds;
+			// A vanilla client shows this in the middle of the screen; the kick follows when it has been held, so it can be read.
+			float delay = Mathf.Max(KickDelaySeconds, PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, message));
+			ServersidePlugin.logger.LogWarning($"Character guard: {what}. Kicking in {delay:0} s; `allow {peer.m_playerName}` in the console lets this character in.");
+			session.kickAt = Time.time + delay;
 		}
 
 		private static void Remember(long id, string name, string account, string reason, DateTime now)

@@ -1,3 +1,41 @@
+## [1.23.2] - 2026-10-18
+
+### Added
+
+- A message in the middle of a player's screen is held. The game shows it at full strength and fades it out over 4 seconds
+  from the moment it arrives, so a message of several lines was half gone before it was read. The server now sends it again
+  every second, `[Server] MessageSecondsPerLine` (3) seconds for each of its lines, at most 30 in all, and the fade starts
+  again each time: the anti-cheat notice (5 lines) is held 15 seconds, a 2-line broadcast 6. A new message to a player
+  takes the place of the one held for them, a broadcast replaces what is held for everybody, and a player who has left is
+  dropped. Each repeat is one more entry in the player's message log (Compendium, Logs; the last 50 are kept). 0 = shown
+  once, as the game does. The top left corner is not held (its messages queue and fade one after another). The repeats
+  keep real time, not `Time.time`: a loaded server's game time falls behind (a frame counts for at most a third of a
+  second; 15 s of it took 20 on the test server). Tested on a dedicated server with six fake players: a message of one line
+  arrived 3 times about a second apart, one of three lines 9 times over 8 s, a message that replaced it cut the old one
+  off, a broadcast of two lines reached everybody 6 times (the broadcast once, five repeats) and a player who was told
+  something else in the middle got nothing more of it, a player kicked in the middle got one more while the game was
+  still disconnecting them (it takes a second) and then nothing, the top left corner got one, and 0 sent one.
+- `broadcast` in the server console takes `\n` (a line break), `\u010d` (the letter with that code) and `\\` (a backslash);
+  any other backslash stays. A panel such as AMP passes a console line in the host's OEM code page and replaces the
+  letters that page lacks by plain ones before the server sees them (č ř š ž ů ě came out as c r s z u e), so these could not
+  be written at all, and a verse could not be broken into lines. Tested through the server's real standard input: bytes
+  of code page 850 with \u016f and \u017e in the line came out as "Skilinův zadek, a line break, nemytý ží" and were held 6 s;
+  a valid UTF-8 line, \\ and a backslash that is no escape (\t, \u12, \uZZZZ) came out as typed.
+
+### Changed
+
+- A kick that follows a message waits until the message has been held: the anti-cheat (6 s) and the character guard (8 s)
+  kick after the longer of their own delay and the message's, so the notice can be read to its end. Whatever the
+  anti-cheat judges meanwhile is still taken away at once. Tested: the character guard kicks 8 s after a message of one
+  line and 30 s after one of 12 lines (the most a message is held); the anti-cheat kicked a fake player 16.0 s of the
+  game's time after its notice of 5 lines (15 s), having told it 15 times, the last 14 s after the first. The anti-cheat
+  test of 30 fake players (41 checks) passed twice: with `MessageSecondsPerLine = 0` the kicks came 6 s after the notice, as
+  before, and with the default 16 to 19 s after it.
+- `[Server] ConsoleInputCodePage` 852, now the default (it was 1250). AMP on this host writes code page 850; its á é í ó ú ý
+  and capitals have the same bytes in 852, and 1250 read them as ě ˇ and so on. A config that has `ConsoleInputCodePage = 1250`
+  keeps it. The line in the log that tells which bytes arrived now says what AMP does with the other letters.
+- A broadcast is logged and answered with its line breaks written `\n`, and with how long it is held.
+
 ## [1.23.1] - 2026-10-17
 
 ### Fixed
