@@ -1,3 +1,27 @@
+## [1.22.0] - 2026-10-17
+
+### Added
+
+- `[AntiCheat] PaidPlanting` (off by default; `Rate` must not be `Off`) and `PlantStamina` (1.3): a row or a grid of crops put
+  down with one press (PlantEasily, MassFarming, ComfyMassFarming, CropUtils) is let through instead of being a break of `Rate`
+  when the player's own game paid for it as the game does. The server sees one of the three prices of a plant (seed, wear of the
+  cultivator, stamina): the stamina of a character is in the character object, with the item in its hand. For a group of plants
+  (RatePlants inside MinInterval, as before) it checks that the cultivator was in the hand and that the stamina went down, by
+  the sum of its falls from the moment the first plant arrived to half a second after the last, by `PlantStamina` for each plant
+  (the game takes 1.625 at the least, times the world's stamina rate). The plants the stamina paid for stay, in the order they
+  came; the rest are taken away and the player is kicked, as under `Rate`. Once a group is a burst it goes on while its plants
+  arrive less than a second after each other (a hitch of the player's game does not split a grid; what the next group pays is not
+  counted for this one); up to four groups per player are followed; a character that another game has written to, and an admin,
+  are not held to it; a character whose stamina ran out inside the group is as paid as it could be (PlantEasily does not look at
+  the stamina for the extras). Stamina values above 400 and not-a-number are ignored, and the credit of one group is at most what
+  the character had plus 15. What it cannot see: why the stamina fell (sprinting, jumping), the seeds and the wear of the tool,
+  and what a game that forges the values writes; the first plant of a press is paid by the game itself, so a group of up to three
+  with free extras passes. By the code of the four mods as of October
+  2026, PlantEasily, MassFarming and ComfyMassFarming pay at their defaults, CropUtils (a twentieth, by its own discount) pays for a few plants only.
+  Each group is written once to the guard log with what the server saw; `anticheat` counts groups and plants let through.
+  Tested with 25 simulated players (25 checks), the 41 of 1.21.0 unchanged with the setting off, and a real client's character
+  (its stamina is in the character object, a jump takes 12 at once, regeneration starts a second later).
+
 ## [1.21.0] - 2026-10-17
 
 ### Added

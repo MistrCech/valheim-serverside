@@ -104,6 +104,8 @@ namespace PluginConfiguration
 		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatRate;
 		public static ConfigEntry<float> antiCheatMinInterval;
 		public static ConfigEntry<int> antiCheatRatePlants;
+		public static ConfigEntry<bool> antiCheatPaidPlanting;
+		public static ConfigEntry<float> antiCheatPlantStamina;
 		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatItems;
 		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatCheatMarks;
 		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatCheatMarksOther;
@@ -364,13 +366,18 @@ namespace PluginConfiguration
 				new ConfigDescription("The game places a piece within 5 m of the player's eye, a few metres more for large pieces and a few more where a piece snaps to its neighbour; the server sees the player's position a moment late. 0: no limit.",
 					new AcceptableValueRange<float>(0f, 500f)));
 			antiCheatRate = config.Bind("AntiCheat", "Rate", Valheim_Serverside.Features.AntiCheat.Mode.On,
-				"RatePlants or more plants of one player put down within MinInterval seconds of each other (a row or a grid of seeds with one press, a mod that plants as fast as it likes). Every plant carries the time at which the player's game planted it, so a slow connection does not bunch plants up. Off, LogOnly or On.");
+				"RatePlants or more plants of one player put down within MinInterval seconds of each other (a row or a grid of seeds with one press, a mod that plants as fast as it likes). Every plant carries the time at which the player's game planted it, so a slow connection does not bunch plants up. With PaidPlanting a group that the player's stamina paid for is let through. Off, LogOnly or On.");
 			antiCheatMinInterval = config.Bind("AntiCheat", "MinInterval", 0.25f,
 				new ConfigDescription("The game plants once in 0.4 s at the fastest. The time written into a plant is the game's network time, which now and then steps by a few tenths of a second, so two plants of an honest player can come out a few hundredths of a second apart (the world of this server has such pairs; no honest player has three in a quarter of a second).",
 					new AcceptableValueRange<float>(0.05f, 0.4f)));
 			antiCheatRatePlants = config.Bind("AntiCheat", "RatePlants", 3,
 				new ConfigDescription("How many plants inside MinInterval make a group the game cannot make. 2 would also catch an honest player whose network time stepped.",
 					new AcceptableValueRange<int>(2, 20)));
+			antiCheatPaidPlanting = config.Bind<bool>("AntiCheat", "PaidPlanting", false,
+				"false: every group of RatePlants plants inside MinInterval is a break of Rate (a mod that plants a row or a grid with one press is not let in). true: such a group is let through when the player's own game paid for it the way the game does: the cultivator is in the player's hand and the stamina of their character fell by PlantStamina for every plant of the group (all the falls from the arrival of the first plant to half a second after the last count, whatever caused them; a character whose stamina ran out inside the group is as paid as it could be). The server sees the stamina of a character and the item in its hand and nothing else of what a press costs: the seeds taken out of the bag and the wear of the cultivator it cannot see (the mods that plant a grid charge both by default, with a switch that turns the wear off), and the first plant of a press is paid by the game itself, so a group of up to three plants with free extras passes. The plants of a group that were not paid for are taken away and Rate acts as before. Only used when Rate is not Off. Needs a restart.");
+			antiCheatPlantStamina = config.Bind("AntiCheat", "PlantStamina", 1.3f,
+				new ConfigDescription("The stamina that must fall for every plant of a group when PaidPlanting is on. A press of the cultivator takes 5, less with the Farming skill (down to half of it) and in a dress, tunic or hat of the harvester kind (down to 65 % with both): 1.625 at the very least in this version of the game, and the world's stamina rate scales it (the server uses it too). 1.3 leaves a little for the way the server sees it. A mod that charges a fraction of it (CropUtils divides the cost by 20 unless told otherwise) pays for a few plants only: the one the game charged by itself and a little more.",
+					new AcceptableValueRange<float>(0.1f, 10f)));
 			antiCheatItems = config.Bind("AntiCheat", "Items", Valheim_Serverside.Features.AntiCheat.Mode.On,
 				"An item that a player's game dropped on the ground with a stack, a quality or a durability above what the item can have (stack-size mods, spawn menus). Items in chests are not looked at; the console command `anticheat scan` lists dropped ones in the stored world. Off, LogOnly or On.");
 			antiCheatCheatMarks = config.Bind("AntiCheat", "CheatMarks", Valheim_Serverside.Features.AntiCheat.Mode.On,

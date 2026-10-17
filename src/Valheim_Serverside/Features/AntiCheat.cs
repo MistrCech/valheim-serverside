@@ -165,6 +165,8 @@ namespace Valheim_Serverside.Features
 			public int character;
 			public bool forged;
 			public int looks;
+			// The serial of the newest stamina sample of the sender when the object arrived (see Sample).
+			public long sample;
 		}
 
 		// What the server's game knows about a prefab that matters for the rules.
@@ -193,6 +195,37 @@ namespace Valheim_Serverside.Features
 			public bool flagged;
 		}
 
+		// What the server saw of a character's stamina and of the item in its right hand after each package of object data from its game, kept
+		// as the value that holds until the next one (a sample is added only when the stamina or the item changed). Serials count the samples of
+		// one player: an object that arrived knows the serial of the newest sample before its package, and what its package and the ones after
+		// it brought have higher serials, so the order is exact whatever the clock says.
+		private struct Stamina
+		{
+			public long serial;
+			public float at;
+			public float value;
+			public int right;
+		}
+
+		// The plants of one player that belong together: each within MinInterval of the one before in planting time, or, once the group is a burst,
+		// arriving within ContinueSeconds of the one before (what one press of a mod that plants a row or a grid makes, and the presses that follow it
+		// closely). A group is a burst when RatePlants of its plants lie inside MinInterval.
+		private class Chain
+		{
+			public long firstTicks;
+			public long lastTicks;
+			public int count;
+			public long sample;
+			public float lastAt;
+			public bool bursty;
+			public bool logged;
+			// the planting times so far, sorted (the newest 64): the burst test
+			public readonly List<long> times = new List<long>();
+			public readonly List<ZDOID> ids = new List<ZDOID>();
+			// the plants before this index are dealt with: paid for, or taken
+			public int dealt;
+		}
+
 		private class Tally
 		{
 			public float since;
@@ -206,6 +239,29 @@ namespace Valheim_Serverside.Features
 		private static readonly Dictionary<int, Info> s_info = new Dictionary<int, Info>();
 		private static HashSet<int> s_buildable;
 		private static readonly Dictionary<long, List<Planting>> s_plants = new Dictionary<long, List<Planting>>();
+		private static readonly Dictionary<long, List<Stamina>> s_stamina = new Dictionary<long, List<Stamina>>();
+		private static readonly Dictionary<long, long> s_serial = new Dictionary<long, long>();
+		private static readonly Dictionary<long, List<Chain>> s_chains = new Dictionary<long, List<Chain>>();
+		private static readonly int s_cultivator = "Cultivator".GetStableHashCode();
+		// How long after the last plant of a group the stamina still counts as paid for it (the game takes the price in the frame of the press;
+		// this is for the way it reaches the server), how soon after the last plant of a burst the next one still belongs to the group (it must be
+		// longer than the first, so that what the next group pays is never counted for this one), how long samples are kept (the newest older one is
+		// always kept), the most stamina a character can have in the server's eyes, and how many plants and groups are remembered.
+		private const float PaidSeconds = 0.5f;
+		private const float ContinueSeconds = 1f;
+		private const float StaleSeconds = 5f;
+		private const float StaminaMemorySeconds = 20f;
+		// The most stamina a character has in the game is 75 and what three foods add (about 210); more is not a stamina. What can fall inside
+		// one window is what the character had, plus what regeneration or a potion brought in that time.
+		private const float StaminaCap = 400f;
+		private const float RegenAllowance = 15f;
+		private const float ExhaustedStamina = 0.05f;
+		// The game does not start a press of the cultivator with 5 stamina or less (Player.HaveStamina of the tool's attack stamina).
+		private const float PressStamina = 5f;
+		private const int ChainIds = 512;
+		private const int MaxChains = 4;
+		private static int s_groups;
+		private static int s_paidPlants;
 		private static readonly Dictionary<long, Queue<float>> s_bursts = new Dictionary<long, Queue<float>>();
 		private static readonly Dictionary<long, string> s_who = new Dictionary<long, string>();
 		private static readonly Dictionary<long, float> s_kickAt = new Dictionary<long, float>();
@@ -271,7 +327,19 @@ namespace Valheim_Serverside.Features
 
 			static void Finalizer()
 			{
+				ZNetPeer sender = s_sender;
 				s_sender = null;
+				if (sender != null && PaidPlanting())
+				{
+					try
+					{
+						Sample(sender);
+					}
+					catch (Exception e)
+					{
+						Fault(e);
+					}
+				}
 			}
 		}
 
@@ -368,6 +436,10 @@ namespace Valheim_Serverside.Features
 			}
 			s_waiting[user] = waiting + 1;
 			Born born = new Born { id = uid, user = user, at = Time.time, forged = uid.UserID != user };
+			if (PaidPlanting())
+			{
+				s_serial.TryGetValue(user, out born.sample);
+			}
 			if (!s_who.ContainsKey(user))
 			{
 				s_who[user] = Who(peer);
@@ -732,6 +804,13 @@ namespace Valheim_Serverside.Features
 			{
 				s_adminAt.Remove(user);
 			}
+			// the stamina samples and plant groups are kept for every connection that sent object data, admins' too
+			foreach (long user in s_serial.Keys.Concat(s_stamina.Keys).Concat(s_chains.Keys).Distinct().Where(u => ZNet.instance.GetPeer(u) == null && !s_waiting.ContainsKey(u)).ToList())
+			{
+				s_stamina.Remove(user);
+				s_serial.Remove(user);
+				s_chains.Remove(user);
+			}
 			foreach (long user in s_kicked.Where(kv => Time.time - kv.Value > KickMemorySeconds).Select(kv => kv.Key).ToList())
 			{
 				s_kicked.Remove(user);
@@ -958,7 +1037,7 @@ namespace Valheim_Serverside.Features
 			if (info.plant)
 			{
 				long planted = zdo.GetLong(ZDOVars.s_plantTime, 0L);
-				if (planted != 0L && Faster(user, peer, zdo, info, planted, pos))
+				if (planted != 0L && (PaidPlanting() ? Group(born, user, peer, zdo, info, planted, pos) : Faster(user, peer, zdo, info, planted, pos)))
 				{
 					return;
 				}
@@ -1118,6 +1197,236 @@ namespace Valheim_Serverside.Features
 				Hit(Rule.Rate, user, peer, zdo, info.name, $"{need} or more plants of the same player within {Configuration.antiCheatMinInterval.Value:0.##} s (the game plants one in 0.4 s)", pos);
 			}
 			return faster;
+		}
+
+		// ---- paid planting ------------------------------------------------------------------------------------------------
+
+		private static bool PaidPlanting()
+		{
+			return Configuration.antiCheatPaidPlanting.Value && ModeOf(Rule.Rate) != Mode.Off;
+		}
+
+		// After each package of object data from a player's game: the stamina of the character and the item in its right hand, when either has
+		// changed. The game writes the stamina into the character in every physics step in which it changed and sends it with everything else that
+		// changed, new objects first, so the package that carries a press of the cultivator (or the next one) carries what the press cost. The
+		// mods that plant a grid pay their price in the frame of the press, before the plants that come after the first one (PlantEasily plants
+		// two a frame), or do not pay it.
+		private static void Sample(ZNetPeer peer)
+		{
+			if (peer.m_characterID.IsNone() || peer.m_characterID.UserID != peer.m_uid || CharacterTampered(peer))
+			{
+				return;
+			}
+			ZDO character = ZDOMan.instance.GetZDO(peer.m_characterID);
+			if (character == null)
+			{
+				return;
+			}
+			float value = character.GetFloat(ZDOVars.s_stamina, -1f);
+			if (!(value >= 0f) || value > StaminaCap)
+			{
+				// absent, not a number, or more than any character has
+				return;
+			}
+			int right = character.GetInt(ZDOVars.s_rightItem, 0);
+			long user = peer.m_uid;
+			if (!s_stamina.TryGetValue(user, out List<Stamina> list))
+			{
+				s_stamina[user] = list = new List<Stamina>();
+			}
+			if (list.Count > 0 && list[list.Count - 1].right == right && Mathf.Abs(list[list.Count - 1].value - value) < 0.0005f)
+			{
+				return;
+			}
+			s_serial.TryGetValue(user, out long serial);
+			s_serial[user] = ++serial;
+			list.Add(new Stamina { serial = serial, at = Time.time, value = value, right = right });
+			// the newest sample older than the memory stays: its value still holds
+			while (list.Count > 2 && Time.time - list[1].at > StaminaMemorySeconds)
+			{
+				list.RemoveAt(0);
+			}
+		}
+
+		private struct Payment
+		{
+			public int paid;
+			public float before;
+			public float credit;
+			public float cost;
+			public string why;
+		}
+
+		// How many plants of a group the player's own game paid for: the stamina of the character went down, from what it was when the first plant
+		// arrived (the sum of its falls up to PaidSeconds after the last plant that came), by at least PlantStamina for each (times the world's
+		// stamina rate), and the cultivator was in the hand. The game takes the stamina of a press and the seed and the wear of the tool in the same
+		// frame, and the mods that plant a grid do the same for each plant (or leave it out, each with a switch); the server sees the stamina only,
+		// and cannot tell why it fell.
+		private static Payment PaidFor(long user, Chain chain)
+		{
+			Payment p = new Payment { cost = Mathf.Max(0.1f, Configuration.antiCheatPlantStamina.Value) * Mathf.Max(0f, Game.m_staminaRate) };
+			if (!s_stamina.TryGetValue(user, out List<Stamina> list) || list.Count == 0)
+			{
+				p.why = "the server has seen no stamina of the character";
+				return p;
+			}
+			// the newest sample the server had before the first plant (one that has been forgotten since, in a very long group, is replaced by the oldest left)
+			int b = -1;
+			for (int i = 0; i < list.Count; i++)
+			{
+				if (list[i].serial <= chain.sample)
+				{
+					b = i;
+				}
+			}
+			if (b < 0)
+			{
+				if (chain.sample == 0L)
+				{
+					p.why = "the server had seen no stamina of the character before the plants";
+					return p;
+				}
+				b = 0;
+			}
+			if (list[b].right != s_cultivator)
+			{
+				p.why = "the cultivator is not in the player's hand";
+				return p;
+			}
+			p.before = list[b].value;
+			float falls = 0f;
+			float low = list[b].value;
+			// what the character had when the press began: the stamina may have regenerated a little between the sample and the plants
+			float peak = list[b].value;
+			bool fell = false;
+			for (int i = b + 1; i < list.Count && list[i].at <= chain.lastAt + PaidSeconds; i++)
+			{
+				falls += Mathf.Max(0f, list[i - 1].value - list[i].value);
+				low = Mathf.Min(low, list[i].value);
+				fell |= list[i].value < list[i - 1].value;
+				if (!fell)
+				{
+					peak = Mathf.Max(peak, list[i].value);
+				}
+			}
+			falls = Mathf.Min(falls, list[b].value + RegenAllowance);
+			p.credit = falls;
+			p.paid = p.cost <= 0.0005f || falls / p.cost + 0.001f >= chain.count ? chain.count : Mathf.FloorToInt(falls / p.cost + 0.001f);
+			if (p.paid < chain.count && p.cost > 0.0005f && low <= ExhaustedStamina && falls >= p.cost && peak > PressStamina)
+			{
+				// The stamina ran out inside the group. The game takes what there is and no more, and a mod that does not look at the stamina for the
+				// extras (PlantEasily) plants the rest of the grid all the same: the group is as paid as the character's stamina could make it.
+				p.paid = chain.count;
+				p.why = null;
+			}
+			return p;
+		}
+
+		// The plants of one player that follow each other within MinInterval are a group: what one press of a mod that plants a row or a grid
+		// makes. The game plants one in 0.4 s, so RatePlants of them or more inside MinInterval are not the game's (the rule that was set from the
+		// real world); they are let through when the player's own game paid for them (PaidFor), the first ones that were paid for, in the order
+		// they came. Each plant is judged as it comes, against the group so far; the plants that came before the group was a burst are taken now if
+		// they are not paid for. A group that is not a burst is left alone, as it always was.
+		private static bool Group(Born born, long user, ZNetPeer peer, ZDO zdo, Info info, long planted, Vector3 pos)
+		{
+			if (ModeOf(Rule.Rate) == Mode.Off)
+			{
+				return false;
+			}
+			long window = (long)(Mathf.Max(0.01f, Configuration.antiCheatMinInterval.Value) * TimeSpan.TicksPerSecond);
+			int need = Mathf.Max(2, Configuration.antiCheatRatePlants.Value);
+			if (!s_chains.TryGetValue(user, out List<Chain> chains))
+			{
+				s_chains[user] = chains = new List<Chain>();
+			}
+			Chain chain = null;
+			for (int i = chains.Count - 1; i >= 0 && chain == null; i--)
+			{
+				// (differences in double: a forged planting time may be anything a long can hold)
+				if (born.at - chains[i].lastAt <= StaleSeconds && (Math.Abs((double)planted - (double)chains[i].lastTicks) <= window || (chains[i].bursty && born.at - chains[i].lastAt <= ContinueSeconds)))
+				{
+					chain = chains[i];
+				}
+			}
+			if (chain == null)
+			{
+				chain = new Chain { sample = born.sample, firstTicks = planted, lastTicks = planted };
+				chains.Add(chain);
+				if (chains.Count > MaxChains)
+				{
+					chains.RemoveAt(0);
+				}
+			}
+			chain.count++;
+			chain.lastTicks = Math.Max(chain.lastTicks, planted);
+			chain.lastAt = Mathf.Max(chain.lastAt, born.at);
+			if (chain.ids.Count < ChainIds)
+			{
+				chain.ids.Add(zdo.m_uid);
+			}
+			if (!chain.bursty)
+			{
+				int at = chain.times.BinarySearch(planted);
+				chain.times.Insert(at < 0 ? ~at : at, planted);
+				if (chain.times.Count > 64)
+				{
+					chain.times.RemoveAt(0);
+				}
+				for (int i = 0; i + need <= chain.times.Count && !chain.bursty; i++)
+				{
+					chain.bursty = (double)chain.times[i + need - 1] - (double)chain.times[i] <= window;
+				}
+				if (chain.bursty)
+				{
+					s_groups++;
+				}
+			}
+			// What another game has written to a character says nothing about its player.
+			if (!chain.bursty || CharacterTampered(peer))
+			{
+				return false;
+			}
+			Payment pay = PaidFor(user, chain);
+			string seen = pay.why ?? $"the stamina of the character went down by {pay.credit:0.#} (from {pay.before:0.#}) where the game takes {pay.cost:0.##} for each plant";
+			if (!chain.logged && Rate("paid" + user, 5f))
+			{
+				chain.logged = true;
+				Write($"{WhoIs(user, peer)}: a group of {chain.count} or more plants, each within {Configuration.antiCheatMinInterval.Value:0.##} s of the one before ({info.name} at {At(pos)}): {seen}; {Mathf.Min(pay.paid, chain.count)} of {chain.count} paid for so far{(pay.paid >= chain.count ? ": let through" : "")}");
+			}
+			string detail = $"a group of {chain.count} plants, each within {Configuration.antiCheatMinInterval.Value:0.##} s of the one before (the game plants one in 0.4 s), and not paid for as the game does: {seen}";
+			bool taken = false;
+			for (int i = chain.dealt; i < chain.ids.Count; i++)
+			{
+				if (i < pay.paid)
+				{
+					s_paidPlants++;
+					continue;
+				}
+				ZDO member = ZDOMan.instance.GetZDO(chain.ids[i]);
+				if (member != null)
+				{
+					Hit(Rule.Rate, user, peer, member, info.name, detail, member.GetPosition());
+				}
+				if (chain.ids[i] == zdo.m_uid)
+				{
+					taken = true;
+				}
+			}
+			chain.dealt = chain.ids.Count;
+			if (chain.count > chain.ids.Count)
+			{
+				// beyond the plants the group remembers
+				if (chain.count - 1 >= pay.paid)
+				{
+					Hit(Rule.Rate, user, peer, zdo, info.name, detail, pos);
+					taken = true;
+				}
+				else
+				{
+					s_paidPlants++;
+				}
+			}
+			return taken;
 		}
 
 		private static void Burst(long user, ZNetPeer peer, ZDO zdo, Info info, float at, Vector3 pos)
@@ -1583,6 +1892,10 @@ namespace Valheim_Serverside.Features
 				StringBuilder text = new StringBuilder();
 				text.Append($"anti-cheat: action {Configuration.antiCheatAction.Value}, admins {(Configuration.antiCheatExemptAdmins.Value ? "exempt" : "held to it as well")}{(s_fed ? "" : "; NOT RUNNING: no player's game has sent object data since the start (or [AntiCheat] Enabled was off at the start and the patches were not applied)")}; ");
 				text.Append($"{s_judged} objects of players' games judged, {s_born.Count} waiting, {s_reverted} taken away, {s_kicks} kick(s), {s_unattributed} from a game that had left, {s_blank} that never got their data, {s_dropped} not looked at (queue full)\n");
+				if (PaidPlanting())
+				{
+					text.Append($"paid planting: {s_groups} group(s) of plants since the start, {s_paidPlants} plant(s) in them let through as paid for\n");
+				}
 				foreach (Rule rule in Enum.GetValues(typeof(Rule)))
 				{
 					text.Append($"  {s_names[(int)rule],-16} {ModeOf(rule),-8} {s_hits[(int)rule],5} finding(s)  {s_labels[(int)rule]}\n");
