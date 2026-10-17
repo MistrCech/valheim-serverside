@@ -16,7 +16,8 @@ namespace Valheim_Serverside.Features
 		and out of a bag passes through an object the server sees.
 
 		In:
-		- picking an item up: the player takes the item over and deletes it (DestroyZDO from that player);
+		- picking an item up: the player takes the item over and deletes it (DestroyZDO from that player), or, when the bag has room
+		  for part of a pile only, writes the smaller stack back (DropChanged);
 		- taking it out of a chest, cart, ship or tombstone: the player who has the container open sends its
 		  new contents.
 		Out:
@@ -126,7 +127,7 @@ namespace Valheim_Serverside.Features
 			public float until;
 		}
 
-		private enum HolderKind { Container, ItemStand, ArmorStand }
+		private enum HolderKind { Container, ItemStand, ArmorStand, Drop }
 
 		private class Confiscation
 		{
@@ -145,6 +146,7 @@ namespace Valheim_Serverside.Features
 			public HolderKind kind;
 			public byte[] items;
 			public int[] slots;
+			public int count;
 		}
 
 		private struct Held
@@ -1131,6 +1133,10 @@ namespace Valheim_Serverside.Features
 			{
 				return new Snapshot { kind = HolderKind.ArmorStand, slots = ReadSlots(zdo, slots) };
 			}
+			if (s_tracked.TryGetValue(prefab, out string tracked))
+			{
+				return new Snapshot { kind = HolderKind.Drop, count = ReadDrop(zdo, tracked).count };
+			}
 			return null;
 		}
 
@@ -1163,6 +1169,9 @@ namespace Valheim_Serverside.Features
 					case HolderKind.ItemStand:
 						StandChanged(zdo, owner, HolderKind.ItemStand, 0, before.slots[0], zdo.GetInt(ZDOVars.s_item, 0), ZDOVars.s_itemData);
 						break;
+					case HolderKind.Drop:
+						DropChanged(zdo, prefab, owner, before.count);
+						break;
 					case HolderKind.ArmorStand:
 						int[] now = ReadSlots(zdo, before.slots.Length);
 						for (int i = 0; i < now.Length; i++)
@@ -1172,6 +1181,36 @@ namespace Valheim_Serverside.Features
 						break;
 				}
 			});
+		}
+
+		/*
+			Part of a stack picked up. When the bag has room for only some of a pile, the game merges that part into
+			the bag and writes the rest back to the item on the ground (ItemDrop.Pickup saves after Humanoid.Pickup):
+			a smaller stack from the player who owns it, and no DestroyZDO. A player with a full bag mining ore does
+			this all the time; the part that went into the bag is counted in, if the player stands where a pickup can
+			be made. The whole of a stack is a DestroyZDO, counted in Destroyed.
+		*/
+		private const float PickupReach = 10f;
+
+		private static void DropChanged(ZDO zdo, int prefab, long owner, int before)
+		{
+			if (!s_tracked.TryGetValue(prefab, out string item))
+			{
+				return;
+			}
+			Held now = ReadDrop(zdo, item);
+			if (now.count >= before)
+			{
+				return;
+			}
+			ZNetPeer peer = ZNet.instance.GetPeer(owner);
+			ZDO character = peer != null && !peer.m_characterID.IsNone() ? ZDOMan.instance.GetZDO(peer.m_characterID) : null;
+			Vector3 player = character != null ? character.GetPosition() : peer != null ? peer.m_refPos : zdo.GetPosition();
+			if (Vector3.Distance(player, zdo.GetPosition()) > PickupReach)
+			{
+				return;
+			}
+			In(AccountOf(owner), item, before - now.count, now.quality, "picked up (part of a stack)");
 		}
 
 		private static void NewFromPlayer(ZDO zdo, int prefab, long owner)

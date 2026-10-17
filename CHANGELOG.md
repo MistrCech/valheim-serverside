@@ -1,3 +1,15 @@
+## [1.22.1] - 2026-10-17
+
+### Fixed
+
+- Item ledger: part of a pile picked up was never counted in. When the bag has room for only some of a pile (a full bag
+  beside a heap of ore), the game merges that part into the bag and writes the smaller stack back to the item on the
+  ground; there is no DestroyZDO, so the ledger saw nothing and later reported the ore as items the character "never got"
+  (`put into a smelter 1 TinOre it never got`, which is what the 6 TinOre in a row of one player looked like). The smaller stack
+  from the player who owns the item, within 10 m of their character, is now counted as a pickup of the difference. Tested: 15
+  of a pile of 40 picked up and 15 put into a chest -- reported before, silent now; the 16th is reported in both.
+  Nothing is taken away by this; the ledger stays LogOnly where it was.
+
 ## [1.22.0] - 2026-10-17
 
 ### Added

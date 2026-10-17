@@ -1,6 +1,6 @@
 # Sarkastic.gg Dedicated Simulation
 
-![version: 1.22.0](https://img.shields.io/badge/version-1.22.0-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.20](https://img.shields.io/badge/Valheim-1.0.20-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)  ![license: MIT (own code)](https://img.shields.io/badge/license-MIT%20%28own%20code%29-5b5f66?style=flat-square)
+![version: 1.22.1](https://img.shields.io/badge/version-1.22.1-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.20](https://img.shields.io/badge/Valheim-1.0.20-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)  ![license: MIT (own code)](https://img.shields.io/badge/license-MIT%20%28own%20code%29-5b5f66?style=flat-square)
 
 [Source code](https://github.com/MistrCech/valheim-serverside)  ·  [Report a bug](https://github.com/MistrCech/valheim-serverside/issues/new)  ·  [Changelog](https://github.com/MistrCech/valheim-serverside/blob/main/CHANGELOG.md)  ·  [Resource Regrowth](https://thunderstore.io/c/valheim/p/Sarkastic_gg/Resource_Regrowth/)
 
@@ -195,7 +195,7 @@ What a character carries without wearing it stays invisible to the server: this 
 
 The server never sees a bag, but nearly every way into and out of one passes through an object it does see:
 
-- **In:** picking an item up (the player takes it over and deletes it), taking it out of a chest, cart, ship or tombstone, or off an item stand or armour stand.
+- **In:** picking an item up (the player takes it over and deletes it; when the bag has room for only part of a pile, the part that went in is counted from the smaller stack the player writes back), taking it out of a chest, cart, ship or tombstone, or off an item stand or armour stand.
 - **Out:** dropping it, putting it into a container or on a stand, feeding it to a smelter, kiln, refinery, cooking station or fermenter, offering it at a boss altar, building with it, dying with it (the tombstone is the whole bag). A drop counts only if the item has been in a bag: the game marks everything in a bag, and what falls out of a destroyed piece, a creature or a rock carries no mark.
 - **Worn:** what a character wears and holds is checked every few seconds; an upgrade shows as a higher quality.
 
