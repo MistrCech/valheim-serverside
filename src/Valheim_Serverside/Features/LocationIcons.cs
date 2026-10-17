@@ -23,6 +23,12 @@ namespace Valheim_Serverside.Features
 		character (the character's player id, the same as the other features use) in
 		<world>.icons.txt next to the world. Icons the game shows always (m_iconAlways: the start temple)
 		stay for everyone. Nothing changes for the players' own pins.
+
+		DiscoverRadius 0 is "as near as the game itself": the location's zone is one the game generates
+		around this player (ZoneSystem.CreateGhostZones: within the simulation distance, near + far
+		zones of the player's zone, a square unless the distance is not "classic"; 4 zones by default,
+		about 256-320 m straight ahead). That is when vanilla shows the icon the first time, to everyone;
+		here only to the player who comes that near, and to each later one when they do.
 	*/
 	public class LocationIcons : IFeature
 	{
@@ -48,6 +54,32 @@ namespace Valheim_Serverside.Features
 			}
 			ZDO character = ZDOMan.instance.GetZDO(peer.m_characterID);
 			return character != null ? character.GetLong(ZDOVars.s_playerID, 0L) : 0L;
+		}
+
+		// Whether a player at `at` is near enough to the location at `position` to find it (see the top).
+		private static bool Near(Vector3 at, Vector3 position, float radius)
+		{
+			if (radius > 0f)
+			{
+				float x = position.x - at.x, z = position.z - at.z;
+				return x * x + z * z <= radius * radius;
+			}
+			SimulationDistance distance = ZoneSystem.instance.m_simulationDistance;
+			int total = distance.TotalSimulationDistance;
+			Vector2s from = ZoneSystem.GetZone(at), to = ZoneSystem.GetZone(position);
+			return Math.Abs(to.x - from.x) <= total && Math.Abs(to.y - from.y) <= total
+				&& (distance.IsClassic || ZoneSystem.instance.ZonesWithinRadius(from, to, total, ghostZone: true));
+		}
+
+		private static string Distance(float radius)
+		{
+			if (radius > 0f)
+			{
+				return $"been within {radius:0} m of it";
+			}
+			SimulationDistance distance = ZoneSystem.instance.m_simulationDistance;
+			return $"been as near as the game generates the world around a player (its zone within {distance.TotalSimulationDistance} zones of theirs"
+				+ (distance.IsClassic ? ", a square" : ", a circle") + ")";
 		}
 
 		// The game's own choice of icons (ZoneSystem.GetLocationIcons on the server).
@@ -117,15 +149,15 @@ namespace Valheim_Serverside.Features
 			}
 			s_nextTick = Time.time + 2f;
 			Load();
+			float radius = Mathf.Max(0f, Configuration.locationIconsDiscoverRadius.Value);
 			if (!s_announced)
 			{
 				s_announced = true;
 				List<ZoneSystem.LocationInstance> all = IconLocations();
-				ServersidePlugin.logger.LogInfo($"Location icons: a player's map shows a location's icon once they have been within {Configuration.locationIconsDiscoverRadius.Value:0} m of it; "
+				ServersidePlugin.logger.LogInfo($"Location icons: a player's map shows a location's icon once they have {Distance(radius)}; "
 					+ $"{all.Count(li => !li.m_location.m_iconAlways)} placed so far ({string.Join(", ", all.Where(li => !li.m_location.m_iconAlways).Select(li => li.m_location.m_prefabName).Distinct())}), "
 					+ $"{all.Count(li => li.m_location.m_iconAlways)} shown to everyone; found by {s_found.Count} character(s) so far.");
 			}
-			float radius = Mathf.Max(0f, Configuration.locationIconsDiscoverRadius.Value);
 			List<ZoneSystem.LocationInstance> placed = IconLocations().Where(li => !li.m_location.m_iconAlways).ToList();
 			HashSet<long> connected = new HashSet<long>();
 			foreach (ZNetPeer peer in ZNet.instance.GetPeers())
@@ -143,8 +175,7 @@ namespace Valheim_Serverside.Features
 					Vector3 at = peer.GetRefPos();
 					foreach (ZoneSystem.LocationInstance location in placed)
 					{
-						float x = location.m_position.x - at.x, z = location.m_position.z - at.z;
-						if (x * x + z * z > radius * radius)
+						if (!Near(at, location.m_position, radius))
 						{
 							continue;
 						}

@@ -49,6 +49,11 @@ namespace Valheim_Serverside
 			{ AccessTools.Method(typeof(ZNetScene), "OutsideActiveArea", new[] { typeof(UnityEngine.Vector3) }), new[] {
 				"ZNet::GetReferencePosition", "ZNet::get_instance", "ZNetScene::OutsideActiveArea", "ZoneSystem::GetZone",
 			} },
+			// Not replaced, but copied: LocationIcons' DiscoverRadius 0 finds a location where this would generate its zone.
+			{ AccessTools.Method(typeof(ZoneSystem), "CreateGhostZones"), new[] {
+				"SimulationDistance::get_IsClassic", "SimulationDistance::get_TotalSimulationDistance", "Vector2s::.ctor", "ZoneSystem::GetZone",
+				"ZoneSystem::IsZoneGenerated", "ZoneSystem::SpawnZone", "ZoneSystem::ZonesWithinRadius",
+			} },
 			// Not replaced, but read by hand: the ward guard parses the routed RPC packet and keys on RPC names.
 			{ AccessTools.Method(typeof(ZRoutedRpc), "RPC_RoutedRPC"), new[] { "RoutedRPCData::.ctor", "RoutedRPCData::Deserialize", "ZRoutedRpc::HandleRoutedRPC", "ZRoutedRpc::RouteRPC" } },
 			{ AccessTools.Method(typeof(ZRoutedRpc.RoutedRPCData), "Deserialize"), new[] { "ZPackage::ReadInt", "ZPackage::ReadLong", "ZPackage::ReadPackage", "ZPackage::ReadZDOID" } },

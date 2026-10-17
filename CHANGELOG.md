@@ -1,3 +1,18 @@
+## [1.23.0] - 2026-10-17
+
+### Changed
+
+- `[LocationIcons] DiscoverRadius` 0, now the default: a player finds a location's icon as near as the game itself shows
+  it -- once the location's zone is one the game generates around that player (`ZoneSystem.CreateGhostZones`: within the
+  simulation distance, near + far zones of the player's zone; a square unless the distance is not "classic"; 4 zones by
+  default, about 256-320 m straight ahead). That is when vanilla shows the icon the first time, to everyone; here to the
+  player who comes that near, and to every later player when they do. With 50 m a player who went to a trader someone
+  else had found saw nothing on the map until within 50 m of it. A number above 0 is still metres; a config that has
+  `DiscoverRadius = 50` keeps it. Tested on a copy of the live world: a player 257 m (4 zones) from the Black Forest
+  trader got the icon and a second player who had not been there did not; at 321 m (5 zones) nobody got it, and with
+  50 m nobody got it at 257 m.
+- The vanilla drift check also watches `ZoneSystem.CreateGhostZones`, which DiscoverRadius 0 copies.
+
 ## [1.22.1] - 2026-10-17
 
 ### Fixed

@@ -1,6 +1,6 @@
 # Sarkastic.gg Dedicated Simulation
 
-![version: 1.22.1](https://img.shields.io/badge/version-1.22.1-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.20](https://img.shields.io/badge/Valheim-1.0.20-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)  ![license: MIT (own code)](https://img.shields.io/badge/license-MIT%20%28own%20code%29-5b5f66?style=flat-square)
+![version: 1.23.0](https://img.shields.io/badge/version-1.23.0-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.20](https://img.shields.io/badge/Valheim-1.0.20-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)  ![license: MIT (own code)](https://img.shields.io/badge/license-MIT%20%28own%20code%29-5b5f66?style=flat-square)
 
 [Source code](https://github.com/MistrCech/valheim-serverside)  ·  [Report a bug](https://github.com/MistrCech/valheim-serverside/issues/new)  ·  [Changelog](https://github.com/MistrCech/valheim-serverside/blob/main/CHANGELOG.md)  ·  [Resource Regrowth](https://thunderstore.io/c/valheim/p/Sarkastic_gg/Resource_Regrowth/)
 
@@ -171,7 +171,7 @@ Clients need nothing.
 | `[AntiCheat] BurstPieces` | 15 | Pieces (not plants) from one player in three seconds that make a burst. |
 | `[AntiCheat] TeleportMetres` / `SpeedLimit` | 250 / 30 | A move of this many metres between two looks (every 2 s) with no portal at either end; metres per second sideways in two looks in a row. |
 | `[LocationIcons] Enabled` | false | Show a location's map icon (Haldor, Hildir, the Bog Witch, Hildir's dungeons, the Deep North boss room, the ancient upgrade station) only to players who have been near it themselves; remembered per character in `<world>.icons.txt`. The start temple's icon stays for everyone. |
-| `[LocationIcons] DiscoverRadius` | 50 | How near (metres, horizontally) a player must have been to a location for its icon to appear on their map. |
+| `[LocationIcons] DiscoverRadius` | 0 | How near (metres, horizontally) a player must have been to a location for its icon to appear on their map. 0: as near as the game itself shows it -- the location's zone within the simulation distance of the player's zone (4 zones by default, about 256-320 m straight ahead). |
 | `[FireControl] Enabled` | false | Limit how far fire spreads (see Fire control below). With the three settings below at their defaults it changes nothing. |
 | `[FireControl] MaxRadius` | -1 | A fire starts only within this many metres (straight line) of the source its chain began at. -1: no limit. |
 | `[FireControl] MaxSpread` | -1 | Caps how many further generations of sparks any fire may set off. 0: nothing throws sparks except an arrow or fireball where it lands. -1: as in the game. |
@@ -368,9 +368,14 @@ goes to everyone; `Minimap` checks no fog for it). So the first player to pass n
 everyone his position.
 
 With `[LocationIcons] Enabled`, the server sends each player only the icons of the locations they have
-been within `DiscoverRadius` (50 m) of themselves, also from inside a dungeon above or below, and
-remembers them per character (`<world>.icons.txt`, one line per character and location). A player who
-finds one gets its icon within two seconds. Icons the game always shows stay for everyone, and players'
+been near themselves, also from inside a dungeon above or below, and remembers them per character
+(`<world>.icons.txt`, one line per character and location). How near is `DiscoverRadius`: 0 (the
+default) is as near as the game itself shows an icon -- the location's zone is one the game generates
+around that player (`ZoneSystem.CreateGhostZones`: the simulation distance, near + far zones of the
+player's zone, a square unless the distance is not "classic"; 4 zones by default, about 256-320 m
+straight ahead, more on a diagonal). That is the moment vanilla shows the icon the first time, to
+everyone; here the player who comes that near gets it, and every later player when they come as near.
+A number above 0 is metres. A player who finds one gets its icon within two seconds. Icons the game always shows stay for everyone, and players'
 own pins are not touched. Tested with two simulated players on a copy of the live world: far away both
 were sent only the start temple; the one taken to the ancient upgrade station got its icon too, the
 other did not; after a restart the first one got both icons at once.
