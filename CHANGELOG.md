@@ -5,7 +5,7 @@
 - Messages on players' screens are broken into lines: `[Server] MessageLineLength` (50) characters in the middle of the
   screen, twice as many in the top left corner. A vanilla client never wraps them (a TextMeshPro without wrapping,
   Averia Serif at 40 in the middle, 20 in the corner), so a long one ran off both sides of the screen -- the anti-cheat
-  notice (about 250 characters), the ward limit and portal pairing messages, a long broadcast or welcome line. Measured
+  notice (218 characters), the ward limit and portal pairing messages, a long broadcast or welcome line. Measured
   with the game's own fonts on a dedicated server: the 72 characters of the portal lock message take 1200 units in the
   middle, and the screen is 1920 units wide at the default GUI scale. Every message the plugin sends goes through one
   place now (`PlayerMessages.Show`); line breaks already in a text are kept. Tested on a dedicated server with the

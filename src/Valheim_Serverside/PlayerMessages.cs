@@ -8,7 +8,7 @@ namespace Valheim_Serverside
 		text into a TextMeshPro that never wraps (MessageHud.ShowMessage; Averia Serif at size 40 in the middle of the
 		screen, 20 in the top left corner, overflow on), so a long message ran off both sides of the screen: measured
 		with the game's own fonts on a dedicated server (17 Oct 2026), the 72 characters of the portal lock message take
-		1200 units in the middle, the anti-cheat notice of about 250 characters 4300, and the screen is 1920 units wide
+		1200 units in the middle, the 218 of the anti-cheat notice 3921, and the screen is 1920 units wide
 		at the default GUI scale (GuiScaler: the smaller of width/1920 and height/1080, times the GUI scale). A line
 		break in the text is kept, so lines are broken here, at spaces: [Server] MessageLineLength characters in the
 		middle, twice as many in the top left corner, where the letters are half as big.
