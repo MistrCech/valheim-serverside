@@ -3,6 +3,7 @@
 #   tcli publish --token <token>        uploads it (the token is a service account token of the team)
 # The version is the plugin's (ServersidePlugin.cs); a package-only change (the icon) takes the next patch number.
 # README.md carries a version badge: change it together with versionNumber.
+# The description is at most 256 characters (Thunderstore answers 400 BadRequest to more).
 [config]
 schemaVersion = "0.0.1"
 
