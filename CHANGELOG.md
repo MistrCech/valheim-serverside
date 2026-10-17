@@ -19,8 +19,13 @@
   with free extras passes. By the code of the four mods as of October
   2026, PlantEasily, MassFarming and ComfyMassFarming pay at their defaults, CropUtils (a twentieth, by its own discount) pays for a few plants only.
   Each group is written once to the guard log with what the server saw; `anticheat` counts groups and plants let through.
-  Tested with 25 simulated players (25 checks), the 41 of 1.21.0 unchanged with the setting off, and a real client's character
+  Tested with 29 simulated players (29 checks), the 41 of 1.21.0 unchanged with the setting off, and a real client's character
   (its stamina is in the character object, a jump takes 12 at once, regeneration starts a second later).
+
+### Changed
+
+- README: the long accounts of the tests (`docs/TESTS.md`) and the table of what the popular cheat mods leave in the world
+  (`docs/MODS.md`) moved out of it, with summaries and links left behind: Thunderstore takes at most 100,000 characters of a README.
 
 ## [1.21.0] - 2026-10-17
 
