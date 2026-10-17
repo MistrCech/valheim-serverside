@@ -448,7 +448,7 @@ namespace Valheim_Serverside.Features
 				return false;
 			}
 			s_told[key] = Time.time;
-			ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage", (int)MessageHud.MessageType.Center, string.Format(message, stone.Boss));
+			PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, string.Format(message, stone.Boss));
 			return true;
 		}
 

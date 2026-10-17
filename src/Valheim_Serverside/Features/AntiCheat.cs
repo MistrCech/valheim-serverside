@@ -1594,7 +1594,7 @@ namespace Valheim_Serverside.Features
 			string message = (Configuration.antiCheatWarnMessage.Value ?? "").Replace("{0}", s_labels[(int)rule]);
 			if (message.Length > 0 && Rate("warn" + user, 3f))
 			{
-				ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage", (int)MessageHud.MessageType.Center, message);
+				PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, message);
 			}
 		}
 
@@ -1671,7 +1671,7 @@ namespace Valheim_Serverside.Features
 			string message = (Configuration.antiCheatMessage.Value ?? "").Replace("{0}", why);
 			if (message.Length > 0)
 			{
-				ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage", (int)MessageHud.MessageType.Center, message);
+				PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, message);
 			}
 		}
 

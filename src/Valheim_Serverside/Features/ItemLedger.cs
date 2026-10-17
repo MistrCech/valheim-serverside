@@ -993,7 +993,7 @@ namespace Valheim_Serverside.Features
 			}
 			if (act && peerUid != 0L)
 			{
-				ZRoutedRpc.instance.InvokeRoutedRPC(peerUid, "ShowMessage", (int)MessageHud.MessageType.Center,
+				PlayerMessages.Show(peerUid, MessageHud.MessageType.Center,
 					string.Format(Configuration.itemLedgerMessage.Value, missing, LocalizedName(item)));
 			}
 			return act;
@@ -1976,7 +1976,7 @@ namespace Valheim_Serverside.Features
 				__state = false;
 				GuardLog.Write($"{account.name} ({account.id}) offered {__instance.m_bossItems} {item} at a boss altar; {missing} never got on this server: the altar refuses");
 				ServersidePlugin.logger.LogWarning($"Item ledger: {account.name} tried to summon a boss with {missing} {item} from another world");
-				ZRoutedRpc.instance.InvokeRoutedRPC(senderId, "ShowMessage", (int)MessageHud.MessageType.Center,
+				PlayerMessages.Show(senderId, MessageHud.MessageType.Center,
 					string.Format(Configuration.itemLedgerAltarMessage.Value, missing, LocalizedName(item)));
 				return false;
 			}

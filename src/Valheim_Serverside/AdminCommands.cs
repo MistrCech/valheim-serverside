@@ -97,7 +97,7 @@ namespace Valheim_Serverside
 		// from the server is not shown by Valheim 1.0 clients (it needs a real player's user id).
 		public static string Broadcast(string text, string byWhom)
 		{
-			ZRoutedRpc.instance.InvokeRoutedRPC(ZRoutedRpc.Everybody, "ShowMessage", (int)MessageHud.MessageType.Center, text);
+			PlayerMessages.Show(ZRoutedRpc.Everybody, MessageHud.MessageType.Center, text);
 			ServersidePlugin.logger.LogInfo($"Admin: {byWhom} broadcast: {text}");
 			return $"shown to {ZNet.instance.GetNrOfPlayers()} player(s): {text}";
 		}

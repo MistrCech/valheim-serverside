@@ -386,11 +386,11 @@ namespace Valheim_Serverside.Features
 			string title = Configuration.welcomeTitle.Value;
 			if (!string.IsNullOrWhiteSpace(title))
 			{
-				ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage", (int)MessageHud.MessageType.Center, title.Trim());
+				PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, title.Trim());
 			}
 			foreach (string line in (Configuration.welcomeLines.Value ?? "").Split('|').Select(l => l.Trim()).Where(l => l.Length > 0))
 			{
-				ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage", (int)MessageHud.MessageType.TopLeft, line);
+				PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.TopLeft, line);
 			}
 			ServersidePlugin.logger.LogInfo($"Character guard: welcomed {peer.m_playerName}");
 		}
@@ -409,7 +409,7 @@ namespace Valheim_Serverside.Features
 			}
 			ServersidePlugin.logger.LogWarning($"Character guard: {what}. Kicking in {KickDelaySeconds:0} s; `allow {peer.m_playerName}` in the console lets this character in.");
 			// A vanilla client shows this in the middle of the screen; the kick follows so it can be read.
-			ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage", (int)MessageHud.MessageType.Center, message);
+			PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, message);
 			session.kickAt = Time.time + KickDelaySeconds;
 		}
 

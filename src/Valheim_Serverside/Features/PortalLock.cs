@@ -790,7 +790,7 @@ namespace Valheim_Serverside.Features
 				return;
 			}
 			s_told[key] = Time.time;
-			ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage", (int)MessageHud.MessageType.Center, message);
+			PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, message);
 			if (s_logged.Add($"told/{key}"))
 			{
 				ServersidePlugin.logger.LogInfo($"Portal lock: {peer.m_playerName} is told at the portal at {Where(portal)} ({kind})");

@@ -571,7 +571,7 @@ namespace Valheim_Serverside.Features
 				{
 					text = message;
 				}
-				ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage", (int)MessageHud.MessageType.Center, text);
+				PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, text);
 			}
 			return false;
 		}
@@ -699,7 +699,7 @@ namespace Valheim_Serverside.Features
 						{
 							text = message;
 						}
-						ZRoutedRpc.instance.InvokeRoutedRPC(owner.m_uid, "ShowMessage", (int)MessageHud.MessageType.Center, text);
+						PlayerMessages.Show(owner.m_uid, MessageHud.MessageType.Center, text);
 					}
 				}
 			}
@@ -879,7 +879,7 @@ namespace Valheim_Serverside.Features
 			string message = Configuration.wardGuardMessage.Value;
 			if (!string.IsNullOrEmpty(message) && Rate("say/" + peer.m_uid, 15f))
 			{
-				ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage", (int)MessageHud.MessageType.Center, message);
+				PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, message);
 			}
 		}
 	}

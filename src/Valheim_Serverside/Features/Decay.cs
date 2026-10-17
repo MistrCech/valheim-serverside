@@ -473,7 +473,7 @@ namespace Valheim_Serverside.Features
 			IEnumerable<string> shown = lines.Count <= ShownToAPlayer ? lines : lines.Take(ShownToAPlayer - 1).Concat(new[] { $"... and {lines.Count - (ShownToAPlayer - 1)} more of your bases are affected." });
 			foreach (string line in shown)
 			{
-				ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage", (int)MessageHud.MessageType.TopLeft, line);
+				PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.TopLeft, line);
 			}
 		}
 

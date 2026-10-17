@@ -19,6 +19,7 @@ namespace PluginConfiguration
 		public static ConfigEntry<int> unityJobWorkers;
 		public static ConfigEntry<string> cpuAffinity;
 		public static ConfigEntry<string> processPriority;
+		public static ConfigEntry<int> messageLineLength;
 
 		public static ConfigEntry<int> sendIntervalMs;
 		public static ConfigEntry<int> maxCatchUpMs;
@@ -181,6 +182,9 @@ namespace PluginConfiguration
 				"Upper limit on Unity job worker threads. Unity starts one per CPU core, and on many-core hosts the idle ones still use CPU. Only ever lowers the count. 0 leaves Unity's default.");
 			cpuAffinity = config.Bind<string>("Server", "CpuAffinity", "",
 				"Processors the server runs on. Empty: wherever the system puts it (as before). auto: one chiplet -- on AMD EPYC and Ryzen a die with its own L3 cache (and on the first EPYC generation its own memory) -- the one least busy over one second at startup, read from the system's own CPU topology, so the server's threads never move between dies. Or a list of processor numbers, e.g. 16-31 or 0-7,32-39. Processors above 63 are not used. Needs a restart.");
+			messageLineLength = config.Bind<int>("Server", "MessageLineLength", 50,
+				new ConfigDescription("Longest line, in characters, of a message the server puts in the middle of a player's screen (anti-cheat, wards, portals, the welcome, broadcasts); messages in the top left corner, in letters half as big, take twice as many. The game never wraps them, so a longer line ran off both sides of the screen: 50 characters are about 870 of the screen's 1920 units at the default GUI scale. Broken at spaces; 0 leaves every message on one line.",
+					new AcceptableValueRange<int>(0, 1000)));
 			processPriority = config.Bind<string>("Server", "ProcessPriority", "Normal",
 				new ConfigDescription("Priority of the server process against everything else on the host: Normal (as before), AboveNormal or High. When the host is busy, a higher priority lets the server's frames go first. Needs a restart.",
 					new AcceptableValueList<string>("Normal", "AboveNormal", "High")));
