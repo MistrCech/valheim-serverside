@@ -33,6 +33,12 @@
   space (`3× Seeker trophy`), so the messages' wrap does not put them on two lines; each line of the sign is in
   `<nobr>`, since the game sizes a sign's text to fill the board and so grew it until a line broke ("... 24" over "h").
 
+### Changed
+
+- README: the details of the anti-cheat (paid planting, the stored world, what it cannot see; `docs/ANTICHEAT.md`) and of
+  the dvergr trade (`docs/DVERGRTRADE.md`) moved out of it, with summaries and links left behind: with the dvergr trade it
+  had grown to 103,505 characters, and Thunderstore takes at most 100,000.
+
 ## [1.23.3] - 2026-10-24
 
 ### Changed
