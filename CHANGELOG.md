@@ -1,3 +1,29 @@
+## [1.24.0 (unreleased)]
+
+### Added
+
+- `[DvergrTrade]` (off by default): buy from the dvergr of the Mistlands with trophies, and have a camp's ward switched
+  off, with vanilla clients. Each of the eight dvergr camps (the three guard towers, the lighthouse, the two
+  excavations, the harbour, the Ashlands' charred tower) has one `dverger_guardstone`; when a player comes within
+  `StandRange` (48 m) of it, the server puts up a stand beside it once the camp is loaded: a dvergr chest and a sign
+  with the offers (ZDOs marked `sgg_trade` 1 and 2, found again after a restart; a spot found with physics at 2.5 to
+  5 m; a destroyed part is put up again after ten minutes). What a player puts into the chest and closes is weighed
+  against `Offers` (`price > reward`, e.g. 3 seeker trophies for 20 black marble): the server takes the chest back from
+  the player's game once it is closed (the game gives an opened chest to the player and never returns it), takes the
+  price, leaves the goods, and tells the player; goods that do not fit undo that trade. A reward `Ward:<hours>` switches
+  the camp's ward off for that long (`sgg_ward_off_until` in the ward's data; the game switches a dvergr ward on again
+  whenever its area is made, so it is kept off every two seconds and by a patch on `PrivateArea.Awake`), calms the
+  dvergr near it that were angry, and, while it is off, does not pass on the anger of picking what lies in the camp
+  (`BaseAI.SetAggravated` with the reason "thief"); hitting a dvergr still angers them. Messages: top left to whoever
+  opens the chest (prices, state of the ward), in the middle of the screen after a trade, when nothing is paid in full,
+  when the goods do not fit, and to the players near the camp when its ward goes off and on. Besides the keys in the
+  README, `WardOffText`, `WardStateOn` and `WardStateOff` hold the few words that are not item names, so a server in
+  another language can have them in its own. Switching the feature off puts up nothing new and takes nothing down;
+  wards that are off still come back on in time. The sign is not translated for each player, so `SignLanguage` (e.g.
+  `Czech`) gives its item names in one language, the game's own words read from its localization files without
+  changing the server's language; empty, the server's (English). Needs a reference to `assembly_guiutils`
+  (`Localization`, `LocalizationSettings`).
+
 ## [1.23.3] - 2026-10-24
 
 ### Changed

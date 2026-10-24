@@ -150,6 +150,22 @@ namespace PluginConfiguration
 		public static ConfigEntry<bool> fireControlFireplaceIgnition;
 		public static ConfigEntry<bool> fireControlOnlyProjectiles;
 
+		public static ConfigEntry<bool> dvergrTradeEnabled;
+		public static ConfigEntry<string> dvergrTradeOffers;
+		public static ConfigEntry<float> dvergrTradeStandRange;
+		public static ConfigEntry<string> dvergrTradeSignTitle;
+		public static ConfigEntry<string> dvergrTradeSignLanguage;
+		public static ConfigEntry<int> dvergrTradeSignTextSize;
+		public static ConfigEntry<string> dvergrTradeWardOffText;
+		public static ConfigEntry<string> dvergrTradeWardStateOn;
+		public static ConfigEntry<string> dvergrTradeWardStateOff;
+		public static ConfigEntry<string> dvergrTradeMessageOpen;
+		public static ConfigEntry<string> dvergrTradeMessageTrade;
+		public static ConfigEntry<string> dvergrTradeMessageMissing;
+		public static ConfigEntry<string> dvergrTradeMessageFull;
+		public static ConfigEntry<string> dvergrTradeMessageWardOff;
+		public static ConfigEntry<string> dvergrTradeMessageWardOn;
+
 		public static void Load(ConfigFile config)
 		{
 			modEnabled = config.Bind<bool>("General", "Enabled", true, "Enable or disable the mod");
@@ -461,6 +477,39 @@ namespace PluginConfiguration
 				"A lit hearth, bonfire, campfire, iron fire pit, brazier or standing torch sets alight whatever burnable touches its flame (vanilla). Off: no fireplace ever does -- a hearth, brazier or torch then cannot start a fire at all, a bonfire or campfire still throws sparks.");
 			fireControlOnlyProjectiles = config.Bind<bool>("FireControl", "OnlyProjectiles", false,
 				"Only projectiles start fires: a fire arrow, a Staff of Embers fireball, a meteor or a lava rock, and what they set alight burns and spreads as before (within MaxRadius and MaxSpread). Nothing a base has -- no fireplace, bonfire, campfire, hearth, brazier or torch, no fire they lit -- throws a spark or sets anything alight, so a player's own build never sets it on fire. Surtlings' and fuling shamans' fireballs never set anything alight in the game.");
+
+			dvergrTradeEnabled = config.Bind<bool>("DvergrTrade", "Enabled", false,
+				"Let players buy from the dvergr of the Mistlands for trophies, and have a camp's ward switched off. Next to each dvergr ward (the guard towers, the lighthouse, the excavations, the harbour, the charred tower) the server puts up a chest and a sign; what a player puts into the chest and closes is weighed against Offers, the price taken and the goods left in its place. An offer can also switch the camp's ward off for some hours (and calm the dvergr that are angry), so what lies in the camp can be taken without anyone being attacked. Vanilla clients: nothing to install. Needs a restart to switch on; switching it off puts up nothing new and takes nothing down (wards that are off still come back on in time). See the README.");
+			dvergrTradeOffers = config.Bind<string>("DvergrTrade", "Offers", "TrophySeeker:3 > BlackMarble:20, TrophyTick:2 > Softtissue:10, TrophyGjall:1 > BlackCore:2, TrophyHare:1 > Lantern:1, TrophySeekerBrute:1 > Ward:24",
+				"What the dvergr trade, comma separated: `price > reward`. The price is one or more `Prefab:count` joined by `+`; the reward is `Prefab:count` (an item) or `Ward:<hours>` (the camp's ward off for so many hours, decimals allowed, at most 7 days from now in all). Offers are paid in this order, each as many times as it is paid in full. Two offers that take the same item: the first wins, the other is skipped with a warning, as is an unknown item.");
+			dvergrTradeStandRange = config.Bind<float>("DvergrTrade", "StandRange", 48f,
+				new ConfigDescription("Metres, sideways: a player this close to a dvergr ward makes the server put up that camp's chest and sign (and tell the players this close when its ward goes off and on).",
+					new AcceptableValueRange<float>(8f, 200f)));
+			dvergrTradeSignTitle = config.Bind<string>("DvergrTrade", "SignTitle", "Dvergr trade: put trophies into the chest",
+				"The first line of the sign; one line per offer follows, with the item names in SignLanguage (the sign is not translated for each player).");
+			dvergrTradeSignLanguage = config.Bind<string>("DvergrTrade", "SignLanguage", "",
+				"The language of the item names on the sign, as the game's own language list names it: Czech, German, Polish, ... (the game's own words, as the players' inventories show them). Empty: the server's language, English on a dedicated server. The messages need nothing: each player's game translates their item names.");
+			dvergrTradeSignTextSize = config.Bind<int>("DvergrTrade", "SignTextSize", 45,
+				new ConfigDescription("Percent: the text of the sign is put in <size=..%> so that it fits the board.",
+					new AcceptableValueRange<int>(10, 100)));
+			dvergrTradeWardOffText = config.Bind<string>("DvergrTrade", "WardOffText", "ward off for {hours} h",
+				"How an offer that switches the ward off reads on the sign and in {offers}. {hours} is the hours.");
+			dvergrTradeWardStateOn = config.Bind<string>("DvergrTrade", "WardStateOn", "Ward: on",
+				"{ward} in MessageOpen while the camp's ward is on.");
+			dvergrTradeWardStateOff = config.Bind<string>("DvergrTrade", "WardStateOff", "Ward: off for {hours} h more",
+				"{ward} in MessageOpen while the camp's ward is off. {hours} is the hours left.");
+			dvergrTradeMessageOpen = config.Bind<string>("DvergrTrade", "MessageOpen", "Dvergr trade (put the trophies in, close the chest):\n{offers}\n{ward}",
+				"Shown in the top left corner to whoever opens the chest. {offers} is one line per offer (item names are translated on the player's own game), {ward} the state of the camp's ward. Empty: no message.");
+			dvergrTradeMessageTrade = config.Bind<string>("DvergrTrade", "MessageTrade", "The dvergr took {paid} and left {got} in the chest.",
+				"Shown in the middle of the screen to the player who closed the chest after a trade that left items. {paid} and {got} are lists such as `3x Seeker trophy`. Empty: no message.");
+			dvergrTradeMessageMissing = config.Bind<string>("DvergrTrade", "MessageMissing", "Not enough for a trade: {missing}",
+				"Shown in the middle of the screen when there are items of a price in the chest but no offer is paid in full. {missing} is what the first offer that has some of its price still lacks. Empty: no message.");
+			dvergrTradeMessageFull = config.Bind<string>("DvergrTrade", "MessageFull", "No room in the chest for {got}; take something out.",
+				"Shown in the middle of the screen when the goods of a trade do not fit; that trade is not made. {got} is the goods. Empty: no message.");
+			dvergrTradeMessageWardOff = config.Bind<string>("DvergrTrade", "MessageWardOff", "The dvergr switched their ward off for {hours} h and calmed down. Take and mine what you want, but do not hurt them.",
+				"Shown in the middle of the screen to every player within StandRange of the camp when its ward is paid off. {hours} is the hours it is off for from now. Empty: no message.");
+			dvergrTradeMessageWardOn = config.Bind<string>("DvergrTrade", "MessageWardOn", "The dvergr switched their ward back on.",
+				"Shown in the middle of the screen to every player within StandRange of the camp when its ward comes back on. Empty: no message.");
 
 			fixTeleportGhosts = config.Bind<bool>("Fixes", "TeleportGhosts", true,
 				"Tell the players near the old spot to drop a player who teleported away. Valheim 1.0 checks whether an object left their area before it stores the new position, so the teleported player stayed there for them, frozen, until they next crossed a zone line.");

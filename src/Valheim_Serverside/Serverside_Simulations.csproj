@@ -43,6 +43,10 @@
       <HintPath>$(VALHEIM_DEDI_INSTALL)\valheim_server_Data\Managed\assembly_utils.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="assembly_guiutils">
+      <HintPath>$(VALHEIM_DEDI_INSTALL)\valheim_server_Data\Managed\assembly_guiutils.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="com.rlabrecque.steamworks.net">
       <HintPath>$(VALHEIM_DEDI_INSTALL)\valheim_server_Data\Managed\com.rlabrecque.steamworks.net.dll</HintPath>
       <Private>False</Private>
@@ -116,6 +120,7 @@
     <Compile Include="Features\GuardianStones.cs" />
     <Compile Include="Features\PortalLock.cs" />
     <Compile Include="Features\WardGuard.cs" />
+    <Compile Include="Features\DvergrTrade.cs" />
     <Compile Include="Features\Decay.cs" />
     <Compile Include="Features\AntiCheat.cs" />
     <Compile Include="Features\Progress.cs" />
