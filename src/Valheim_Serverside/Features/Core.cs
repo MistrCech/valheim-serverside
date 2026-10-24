@@ -125,6 +125,61 @@ namespace Valheim_Serverside.Features
 			}
 		}
 
+		[HarmonyPatch(typeof(Trap), "RPC_OnStateChanged")]
+		public static class Trap_RPC_OnStateChanged_Patch
+		/*
+			1.0's traps (the Fuling trap, the troll trap) tell everybody when they arm or go off, and the
+			handler compares the humanoid that set one off with Player.m_localPlayer.GetZDOID().ID: a
+			NullReferenceException on the server for every state change of every trap it owns. Found
+			by the audit of 24. 10. 2026 (a scan of the game's RPC handlers for Player.m_localPlayer),
+			not in a live log yet: nobody had built a trap.
+		*/
+		{
+			static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
+			{
+				return ServerSafe.NullSafeLocalPlayer(instructions, __originalMethod, expected: 1);
+			}
+		}
+
+		[HarmonyPatch]
+		public static class MusicVolume_RPC_PlayMusic_Patch
+		/*
+			A location's music trigger (MusicVolume; 1.0.20 also has a MusicLocation class, without the
+			RPC) tells everybody to play its music, and the handler measures the distance from
+			Player.m_localPlayer.transform. Music means nothing on the server: the handler is skipped
+			there. Found by the same audit.
+		*/
+		{
+			static MethodBase TargetMethod()
+			{
+				foreach (string name in new[] { "MusicVolume", "MusicLocation" })
+				{
+					Type type = AccessTools.TypeByName(name);
+					MethodBase method = type != null ? AccessTools.Method(type, "RPC_PlayMusic") : null;
+					if (method != null)
+					{
+						return method;
+					}
+				}
+				return null;
+			}
+
+			static bool Prepare()
+			{
+				if (TargetMethod() == null)
+				{
+					ServersidePlugin.logger.LogWarning("MusicVolume.RPC_PlayMusic was not found; the game changed it and the patch is skipped.");
+					return false;
+				}
+				return true;
+			}
+
+			static bool Prefix()
+			{
+				return !ZNet.instance || !ZNet.instance.IsDedicated();
+			}
+		}
+
 		[HarmonyPatch(typeof(ZNetScene), "CreateDestroyObjects")]
 		public class CreateDestroyObjects_Patch
 		/*

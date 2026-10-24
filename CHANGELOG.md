@@ -1,3 +1,26 @@
+## [1.23.3] - 2026-10-24
+
+### Changed
+
+- `[AntiCheat] Items`: a dropped item's quality was limited to 6 (or the recipe's top, whichever is more). Valheim 1.0's
+  upgrade station takes quality one step at a time past the recipe's top with no ceiling of its own, and the upgraders it
+  needs drop from the chests of every biome, so an honest player's item of quality 7 would have been taken away and the
+  player kicked. Quality is now checked only against the new `[AntiCheat] MaxQuality` (0 = not checked, the default);
+  stack and durability are checked as before.
+
+### Added
+
+- Night spawn guard: a spawn gated by a world key outside the boss chain the guard knows (Deep North's `jotun_killed`) is
+  logged once and left as the game has it; before, nothing said so.
+- Guardian stones: a stone whose power is not in that chain is logged (its trophy is shown to everyone); before it was
+  silently left out.
+- Portal lock: each `KeepClear` name the world has no location of is logged once (a world generated before an update, or a
+  misspelt name); before, only a world with none of them was.
+- Two more game methods made safe on the server (`ServerSafe`): `Trap.RPC_OnStateChanged` (the Fuling and troll traps read
+  the local player on every state change: a null reference on the server for every trap it owns) and
+  `MusicVolume.RPC_PlayMusic` (skipped on the server; music means nothing there). Found by a scan of the game's RPC
+  handlers for `Player.m_localPlayer`; neither had shown in a live log yet.
+
 ## [1.23.2] - 2026-10-18
 
 ### Added

@@ -94,9 +94,16 @@ namespace Valheim_Serverside.Features
 				{
 					BossStone stone = prefab ? prefab.GetComponent<BossStone>() : null;
 					StatusEffect power = stone && stone.m_itemStand ? stone.m_itemStand.m_guardianPower : null;
-					if (power && prefab.GetComponent<ZNetView>() && s_powers.TryGetValue(power.name, out KeyValuePair<int, string> need))
+					if (power && prefab.GetComponent<ZNetView>())
 					{
-						s_stones[prefab.name.GetStableHashCode()] = new Stone { Needed = need.Key, Boss = need.Value };
+						if (s_powers.TryGetValue(power.name, out KeyValuePair<int, string> need))
+						{
+							s_stones[prefab.name.GetStableHashCode()] = new Stone { Needed = need.Key, Boss = need.Value };
+						}
+						else
+						{
+							ServersidePlugin.logger.LogWarning($"Guardian stones: {prefab.name} offers {power.name}, a power not in the boss chain this feature knows; its trophy is shown to everyone.");
+						}
 					}
 				}
 				ServersidePlugin.logger.LogInfo($"Guardian stones: {s_stones.Count} stone(s) whose trophy only players who beat the boss see");

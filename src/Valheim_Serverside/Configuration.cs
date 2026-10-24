@@ -127,6 +127,7 @@ namespace PluginConfiguration
 		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatFlood;
 		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatLevel;
 		public static ConfigEntry<int> antiCheatMaxLevel;
+		public static ConfigEntry<int> antiCheatMaxQuality;
 		public static ConfigEntry<int> antiCheatSoftStrikes;
 		public static ConfigEntry<string> antiCheatWarnMessage;
 		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatTeleport;
@@ -427,6 +428,9 @@ namespace PluginConfiguration
 			antiCheatMaxLevel = config.Bind("AntiCheat", "MaxLevel", 10,
 				new ConfigDescription("The highest level of a creature that is let through. The game makes up to three stars (level 4) from its spawn data; a spawn menu lets a player type any number.",
 					new AcceptableValueRange<int>(2, 1000)));
+			antiCheatMaxQuality = config.Bind("AntiCheat", "MaxQuality", 0,
+				new ConfigDescription("The highest quality of a dropped item that is let through under the Items rule; 0 = quality is not checked. The upgrade station of 1.0 takes an item's quality one step at a time past its recipe's top, with no ceiling of its own (upgraders drop from the chests of every biome), so any number here can one day meet an honest player's item; a dropped egg or fish carries the level of the creature. Stack and durability are checked whatever this is.",
+					new AcceptableValueRange<int>(0, 1000)));
 			antiCheatTeleport = config.Bind("AntiCheat", "Teleport", Valheim_Serverside.Features.AntiCheat.Mode.LogOnly,
 				"A character that moved TeleportMetres or more in a few seconds with no portal within 20 m of either end, and neither end in a dungeon (the map-click teleport mods). LogOnly by default: the check is new and the game has more ways to move a player than a portal. Off, LogOnly or On.");
 			antiCheatTeleportMetres = config.Bind("AntiCheat", "TeleportMetres", 250f,

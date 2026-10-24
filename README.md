@@ -1,6 +1,6 @@
 # Sarkastic.gg Dedicated Simulation
 
-![version: 1.23.2](https://img.shields.io/badge/version-1.23.2-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.20](https://img.shields.io/badge/Valheim-1.0.20-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)  ![license: MIT (own code)](https://img.shields.io/badge/license-MIT%20%28own%20code%29-5b5f66?style=flat-square)
+![version: 1.23.3](https://img.shields.io/badge/version-1.23.3-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.20](https://img.shields.io/badge/Valheim-1.0.20-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)  ![license: MIT (own code)](https://img.shields.io/badge/license-MIT%20%28own%20code%29-5b5f66?style=flat-square)
 
 [Source code](https://github.com/MistrCech/valheim-serverside)  ·  [Report a bug](https://github.com/MistrCech/valheim-serverside/issues/new)  ·  [Changelog](https://github.com/MistrCech/valheim-serverside/blob/main/CHANGELOG.md)  ·  [Resource Regrowth](https://thunderstore.io/c/valheim/p/Sarkastic_gg/Resource_Regrowth/)
 
@@ -167,6 +167,7 @@ Clients need nothing.
 | `[AntiCheat] UnknownPrefabs`, `NotBuildable`, `Forged`, `Identity`, `Creator`, `Distance`, `Rate`, `Items`, `CheatMarks`, `Fly`, `Fields`, `Flood`, `Level`, `Wards`, `NoBuild`, `Biome`, `Dungeon` | On | One rule each (see below): `Off`, `LogOnly` (only written to `<world>.guard.log`) or `On` (does what `Action` says). |
 | `[AntiCheat] CheatMarksOther`, `Cultivated`, `Burst`, `Health`, `Rotation`, `Teleport`, `Speed` | LogOnly | The rules that can be wrong for an honest player or that break nothing but the look: a trace in the log, nothing more, until set to On. |
 | `[AntiCheat] MaxLevel` | 10 | The highest creature level let through (the game makes up to three stars, level 4). |
+| `[AntiCheat] MaxQuality` | 0 | The highest quality of a dropped item let through; 0 = not checked. The upgrade station of 1.0 raises quality past the recipe's top with no ceiling of its own, so leave this at 0 unless you know a number your players cannot reach. |
 | `[AntiCheat] MaxDistance` | 30 | Metres from the player at which a piece is "far" (the game places within 5 m of the eye, a few more for large pieces). 0: no limit. |
 | `[AntiCheat] MinInterval` / `RatePlants` | 0.25 / 3 | `RatePlants` or more plants of one player within `MinInterval` seconds are more than the game plants (one in 0.4 s). |
 | `[AntiCheat] PaidPlanting` / `PlantStamina` | false / 1.3 | `true`: a group of plants that `Rate` would take is let through when the cultivator was in the player's hand and the stamina of their character went down by `PlantStamina` for each plant of it (see "Paid planting" below); the plants it did not pay for are taken away and `Rate` acts as before. The game takes 1.625 at the least for a plant, times the world's stamina rate; a mod that charges less than `PlantStamina` does not pay. Needs a restart. |
@@ -323,7 +324,7 @@ The server does not see a player's mods -- the game tells it nothing about them 
 | `Creator` | has a creator that is not the character that sent it | On |
 | `Distance` | is a piece placed more than `MaxDistance` (30) m from the player, both when it arrived and a moment later | On, warns first |
 | `Rate` | is one of three or more plants of one player within `MinInterval` (0.25 s): rows and grids of seeds with one press (with `PaidPlanting`: unless the player's stamina paid for them) | On |
-| `Items` | is a dropped item whose stack or durability is more than the item can have, or whose quality is above 6 (the game gives a dropped egg or fish the level of the creature) | On |
+| `Items` | is a dropped item whose stack or durability is more than the item can have, or whose quality is above `MaxQuality` when one is set (the game's upgrade station has no ceiling; an egg or a fish carries the level of the creature) | On |
 | `CheatMarks` | is a creature that carries the game's own mark for cheating (the console's `spawn`) | On |
 | `Fields` | carries `HasFields`, per-object field overrides (invulnerable, invisible, enormous), which the game writes only for the console's `spawn` given component fields | On |
 | `Level` | is a creature of a level above `MaxLevel` (10): a spawn menu lets a player type any level | On |

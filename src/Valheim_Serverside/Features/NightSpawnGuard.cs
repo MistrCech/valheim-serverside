@@ -85,8 +85,17 @@ namespace Valheim_Serverside.Features
 					int least = -1;
 					foreach (SpawnSystem.SpawnData spawner in spawners)
 					{
-						if (spawner.m_requiredGlobalKey == null || !s_needed.TryGetValue(spawner.m_requiredGlobalKey, out int needed))
+						if (string.IsNullOrEmpty(spawner.m_requiredGlobalKey))
 						{
+							continue;
+						}
+						if (!s_needed.TryGetValue(spawner.m_requiredGlobalKey, out int needed))
+						{
+							// A key outside the boss chain this guard knows (Deep North's jotun_killed): the spawn stays as the game has it.
+							if (s_logged.Add("unmapped/" + spawner.m_requiredGlobalKey))
+							{
+								ServersidePlugin.logger.LogInfo($"Night spawn guard: {spawner.m_name} needs the world key {spawner.m_requiredGlobalKey}, which is not in the boss chain this guard knows; it spawns as the game has it, for everyone once the key is set.");
+							}
 							continue;
 						}
 						if (least < 0)

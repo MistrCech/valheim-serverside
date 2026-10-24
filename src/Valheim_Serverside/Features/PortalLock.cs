@@ -169,9 +169,16 @@ namespace Valheim_Serverside.Features
 					}
 				}
 			}
-			if (places.Count == 0 && names.Count > 0 && KeepClearRadius > 0f && ZoneSystem.instance != null && ZoneSystem.instance.LocationsGenerated && s_logged.Add("pair/keepclear/none"))
+			if (KeepClearRadius > 0f && ZoneSystem.instance != null && ZoneSystem.instance.LocationsGenerated)
 			{
-				ServersidePlugin.logger.LogWarning($"Portal lock: KeepClear names {string.Join(", ", names)} but the world has no such location: no public portal is kept clear of anything");
+				// Each name once: a world generated before the location's update has none of it, and a misspelt name is only seen here.
+				foreach (string name in names.Where(n => !places.Any(p => p.Key == n)).OrderBy(n => n, StringComparer.Ordinal))
+				{
+					if (s_logged.Add("pair/keepclear/missing/" + name))
+					{
+						ServersidePlugin.logger.LogWarning($"Portal lock: KeepClear names {name}, but the world has no such location; nothing is kept clear of it");
+					}
+				}
 			}
 			if (places.Count != s_keepClear.Count && s_logged.Add($"pair/keepclear/{places.Count}"))
 			{

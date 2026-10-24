@@ -1486,11 +1486,12 @@ namespace Valheim_Serverside.Features
 			{
 				return $"stack of {stack}, the most the item can have is {info.maxStack}";
 			}
-			// The game itself gives an egg or a fish the quality of the creature that laid or was caught, a level, which can be above what the item
-			// is upgraded to; what the console's spawn command allows is 4. Only quality that no creature has is counted.
-			if (quality > Mathf.Max(info.maxQuality, 6))
+			// Quality has no ceiling in the game since 1.0: the upgrade station takes it one step at a time past the recipe's top, and an egg or a
+			// fish carries the level of the creature. So it is checked only against MaxQuality when the owner set one (0 = not checked).
+			int maxQuality = Configuration.antiCheatMaxQuality.Value;
+			if (maxQuality > 0 && quality > Mathf.Max(info.maxQuality, maxQuality))
 			{
-				return $"quality {quality}, the most the item can have is {info.maxQuality}";
+				return $"quality {quality}, more than MaxQuality {maxQuality}";
 			}
 			if (info.data.m_shared.m_useDurability && durability > info.data.GetMaxDurability(Mathf.Max(1, quality)) * 1.01f + 1f)
 			{
