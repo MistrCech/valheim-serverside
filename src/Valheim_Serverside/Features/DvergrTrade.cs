@@ -473,9 +473,11 @@ namespace Valheim_Serverside.Features
 			return hours.ToString("0.##", CultureInfo.InvariantCulture);
 		}
 
+		// a no-break space after the count, so neither the messages' wrap (it breaks at plain spaces) nor the sign's puts the
+		// count on one line and the item on the next
 		private static string Times(int count, string what)
 		{
-			return count.ToString(CultureInfo.InvariantCulture) + "\u00d7 " + what;
+			return count.ToString(CultureInfo.InvariantCulture) + "\u00d7\u00a0" + what;
 		}
 
 		private static string WardText(double hours)

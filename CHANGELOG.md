@@ -29,7 +29,8 @@
   after the server wrote a chest an open is answered "in use" (a game would show and save back the old contents); an
   offer of the ward is taken only while all its hours fit in seven days (else `MessageWardMax`, the trophies stay);
   goods that do not fit stop the item offers after them but not the ward's; a ward that is off takes no damage. The
-  sign is lifted onto the ground (its pivot is the middle of the board).
+  sign is lifted onto the ground (its pivot is the middle of the board). A count and its item are joined by a no-break
+  space (`3× Seeker trophy`), so neither the messages' wrap nor the sign puts them on two lines.
 
 ## [1.23.3] - 2026-10-24
 
