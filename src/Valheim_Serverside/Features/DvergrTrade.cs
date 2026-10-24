@@ -531,11 +531,13 @@ namespace Valheim_Serverside.Features
 			{
 				return s_signText;
 			}
+			// the game sizes a sign's text to fill its board, so it grew until one line broke ("... na 24" over "h"): each line in
+			// <nobr> keeps it whole, and the text is sized to the longest instead (the hover text drops the tags)
 			StringBuilder text = new StringBuilder();
-			text.Append("<size=").Append(Configuration.dvergrTradeSignTextSize.Value).Append("%>").Append(Configuration.dvergrTradeSignTitle.Value);
+			text.Append("<size=").Append(Configuration.dvergrTradeSignTextSize.Value).Append("%><nobr>").Append(Configuration.dvergrTradeSignTitle.Value).Append("</nobr>");
 			foreach (Offer offer in s_offers)
 			{
-				text.Append('\n').Append(DescribeSign(offer));
+				text.Append("\n<nobr>").Append(DescribeSign(offer)).Append("</nobr>");
 			}
 			text.Append("</size>");
 			s_signKey = key;
