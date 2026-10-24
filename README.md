@@ -1,6 +1,6 @@
 # Sarkastic.gg Dedicated Simulation
 
-![version: 1.23.3](https://img.shields.io/badge/version-1.23.3-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.20](https://img.shields.io/badge/Valheim-1.0.20-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)  ![license: MIT (own code)](https://img.shields.io/badge/license-MIT%20%28own%20code%29-5b5f66?style=flat-square)
+![version: 1.24.0](https://img.shields.io/badge/version-1.24.0-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.20](https://img.shields.io/badge/Valheim-1.0.20-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)  ![license: MIT (own code)](https://img.shields.io/badge/license-MIT%20%28own%20code%29-5b5f66?style=flat-square)
 
 [Source code](https://github.com/MistrCech/valheim-serverside)  ·  [Report a bug](https://github.com/MistrCech/valheim-serverside/issues/new)  ·  [Changelog](https://github.com/MistrCech/valheim-serverside/blob/main/CHANGELOG.md)  ·  [Resource Regrowth](https://thunderstore.io/c/valheim/p/Sarkastic_gg/Resource_Regrowth/)
 
