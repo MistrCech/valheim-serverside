@@ -23,6 +23,13 @@
   `Czech`) gives its item names in one language, the game's own words read from its localization files without
   changing the server's language; empty, the server's (English). Needs a reference to `assembly_guiutils`
   (`Localization`, `LocalizationSettings`).
+  Guards from a review before release: the chest carries `s_cheated` = 1 (Regrowth skips it; the game marks drops as
+  cheated only at 2, so a broken chest's wood is not cheated); a chest taken back is weighed a tick later, and if the
+  player's game granted itself an open meanwhile (its owner revision goes down) it is given back unweighed; for 2.5 s
+  after the server wrote a chest an open is answered "in use" (a game would show and save back the old contents); an
+  offer of the ward is taken only while all its hours fit in seven days (else `MessageWardMax`, the trophies stay);
+  goods that do not fit stop the item offers after them but not the ward's; a ward that is off takes no damage. The
+  sign is lifted onto the ground (its pivot is the middle of the board).
 
 ## [1.23.3] - 2026-10-24
 

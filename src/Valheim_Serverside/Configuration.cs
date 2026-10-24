@@ -165,6 +165,7 @@ namespace PluginConfiguration
 		public static ConfigEntry<string> dvergrTradeMessageFull;
 		public static ConfigEntry<string> dvergrTradeMessageWardOff;
 		public static ConfigEntry<string> dvergrTradeMessageWardOn;
+		public static ConfigEntry<string> dvergrTradeMessageWardMax;
 
 		public static void Load(ConfigFile config)
 		{
@@ -510,6 +511,8 @@ namespace PluginConfiguration
 				"Shown in the middle of the screen to every player within StandRange of the camp when its ward is paid off. {hours} is the hours it is off for from now. Empty: no message.");
 			dvergrTradeMessageWardOn = config.Bind<string>("DvergrTrade", "MessageWardOn", "The dvergr switched their ward back on.",
 				"Shown in the middle of the screen to every player within StandRange of the camp when its ward comes back on. Empty: no message.");
+			dvergrTradeMessageWardMax = config.Bind<string>("DvergrTrade", "MessageWardMax", "The ward is off for {hours} h already; the dvergr do not switch it off for longer than {max} h. The trophies stay in the chest.",
+				"Shown in the middle of the screen to the player who closed the chest when an offer of the ward was paid but its hours would take the ward past seven days from now; that offer is not taken. {hours} is the hours the ward is off for, {max} the most (168). Empty: no message.");
 
 			fixTeleportGhosts = config.Bind<bool>("Fixes", "TeleportGhosts", true,
 				"Tell the players near the old spot to drop a player who teleported away. Valheim 1.0 checks whether an object left their area before it stores the new position, so the teleported player stayed there for them, frozen, until they next crossed a zone line.");

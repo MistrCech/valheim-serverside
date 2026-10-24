@@ -37,10 +37,17 @@ namespace Valheim_Serverside.Features
 		full, the price taken out, the goods put in, and the result written back (a client reads it again when the revision
 		changes). The chest is taken back only after it has stayed with the player's game for a moment: the game's
 		"stack all" and "take all" hand the chest over without InUse, and the player's game writes into it a moment
-		later, which a server that took it straight back would cut off. Goods that do not fit undo that trade and stop. The
-		item ledger books what a player takes out of the chest in the usual way (it ignores the server's own writes).
-		The chest carries s_addedDefaultItems (so the game does not fill it with the camp's loot) and s_cheated (so
-		Resource Regrowth's treasure chests never restock it).
+		later, which a server that took it straight back would cut off. It is weighed a tick after it was taken back: a
+		player's game that is still the owner grants itself an open without asking anyone, and if that crosses the server
+		taking it back, the game's newer data wins on the server with its older owner revision while the game itself takes
+		the server's; the server sees that revision go down, weighs nothing and gives the chest back to that game. After the
+		server has written a chest, nobody may open it for a moment ("in use"): a game loads a chest's contents once a
+		second and never while it is open, so one opened before it has loaded the server's write would show the old
+		contents and save them back. Goods that do not fit undo that trade and the item offers after it (an offer of the
+		ward is still weighed). The item ledger books what a player takes out of the chest in the usual way (it ignores
+		the server's own writes). The chest carries s_addedDefaultItems (so the game does not fill it with the camp's
+		loot) and s_cheated = 1 (Resource Regrowth's treasure chests never restock a chest whose s_cheated is not 0; the
+		game marks what an object drops as cheated only at 2, so the wood of a broken chest is clean).
 
 		The ward: "Ward:<hours>" as the goods. The ward gets a time in its data (sgg_ward_off_until, ZNet time), is switched
 		off, and every dvergr near it that was angry is calmed (nothing in the game calms them again). The game switches a
@@ -49,6 +56,11 @@ namespace Valheim_Serverside.Features
 		the one thing that would anger the camp for taking what lies in it -- picking a lantern or a stein (the "thief"
 		reason of BaseAI.SetAggravated) -- is not passed on to the dvergr. Hitting a dvergr still angers them (and
 		paying again calms them). Damaging a thing inside a ward that is switched off angers nobody: the game's own rule.
+		The ward itself takes no damage while it is off, or it could be broken without a fight (and the camp would lose its
+		stand). Paid hours are added to what is left, and an offer of the ward is taken only while all its hours fit
+		within seven days from now; otherwise its trophies stay in the chest and the player is told (MessageWardMax). The
+		time is the server's (ZNet), which stands still while nobody is online and jumps when the players sleep, as the
+		game's own timers do.
 
 		Not here: coins, a trade window, prices per camp, taking the stands down when the feature is switched off.
 	*/
@@ -68,7 +80,13 @@ namespace Valheim_Serverside.Features
 		private const float OpenGraceSeconds = 5f;
 		private const float RetrySeconds = 600f;
 		private const float WardCapDays = 7f;
+		// After the server has written a chest: a player's game loads it at most a second after the data arrives.
+		private const float WriteLockSeconds = 2.5f;
 		private const float SignOffset = 1.3f;
+		// The sign's pivot is the middle of its board (its colliders reach 0.28 m below and above it): lifted by a little less
+		// than half its height it stands on the ground, where the game's support check (0.15 m around each collider) finds
+		// the terrain. The chest's pivot is its bottom.
+		private const float SignLift = 0.26f;
 
 		private static readonly int s_keyTrade = "sgg_trade".GetStableHashCode();
 		private static readonly int s_keyOff = "sgg_ward_off_until".GetStableHashCode();
@@ -105,6 +123,11 @@ namespace Valheim_Serverside.Features
 			public long lastUser;
 			public float ownerSince;
 			public float openUntil;
+			// Nobody may open it until then (the server has just written it).
+			public float lockedUntil;
+			// Taken back from a player's game at this time (0: not), with this owner revision; weighed a tick later.
+			public float takenAt;
+			public ushort takenRevision;
 		}
 
 		private static bool s_ready;
@@ -927,7 +950,7 @@ namespace Valheim_Serverside.Features
 					}
 					ZDO chest = CreateObject(s_chestHash, chestAt, rotation);
 					chest.Set(ZDOVars.s_addedDefaultItems, true);
-					chest.Set(ZDOVars.s_cheated, 2);
+					chest.Set(ZDOVars.s_cheated, 1);
 					chest.Set(s_keyTrade, 1);
 					ZDO sign = CreateObject(s_signHash, signAt, rotation);
 					sign.Set(ZDOVars.s_text, SignText());
@@ -956,16 +979,16 @@ namespace Valheim_Serverside.Features
 			Vector3 side = rotation * Vector3.right * SignOffset;
 			if (haveChest)
 			{
-				ZDO sign = CreateObject(s_signHash, other.GetPosition() + side, rotation);
+				ZDO sign = CreateObject(s_signHash, other.GetPosition() + side + Vector3.up * SignLift, rotation);
 				sign.Set(ZDOVars.s_text, SignText());
 				sign.Set(s_keyTrade, 2);
 				stand.sign = sign.m_uid;
 			}
 			else
 			{
-				ZDO chest = CreateObject(s_chestHash, other.GetPosition() - side, rotation);
+				ZDO chest = CreateObject(s_chestHash, other.GetPosition() - side - Vector3.up * SignLift, rotation);
 				chest.Set(ZDOVars.s_addedDefaultItems, true);
-				chest.Set(ZDOVars.s_cheated, 2);
+				chest.Set(ZDOVars.s_cheated, 1);
 				chest.Set(s_keyTrade, 1);
 				stand.chest = chest.m_uid;
 			}
@@ -991,7 +1014,12 @@ namespace Valheim_Serverside.Features
 			{
 				return false;
 			}
-			return !Physics.CheckBox(signAt + Vector3.up * 0.8f, s_signHalf, rotation, s_boxMask, QueryTriggerInteraction.Ignore);
+			if (Physics.CheckBox(signAt + Vector3.up * 0.7f, s_signHalf, rotation, s_boxMask, QueryTriggerInteraction.Ignore))
+			{
+				return false;
+			}
+			signAt += Vector3.up * SignLift;
+			return true;
 		}
 
 		// The ground below a point: 9 m down from 4 m above the ward's height, within 1.5 m of it, and level.
@@ -1050,6 +1078,19 @@ namespace Valheim_Serverside.Features
 			float now = Time.time;
 			long owner = chest.GetOwner();
 			ZNetPeer peer = owner != 0L && owner != server ? ZNet.instance.GetPeer(owner) : null;
+			bool taken = state.takenAt > 0f && now - state.takenAt < 5f;
+			state.takenAt = 0f;
+			if (peer != null && taken && chest.OwnerRevision < state.takenRevision)
+			{
+				// Taken back last tick, and a player's game has it again with an owner revision older than the one the server
+				// gave it: the game granted itself an open as the server took the chest back, its newer data won here and it
+				// took the server's owner itself. Nothing is weighed; the chest goes back to that game, with a revision above both.
+				chest.SetOwner(server);
+				chest.SetOwner(owner);
+				state.ownerSince = 0f;
+				ServersidePlugin.logger.LogInfo($"DvergrTrade: {peer.m_playerName} opened the chest at {LocationOf(ward.GetPosition(), stand)} just as the server took it back; it is theirs again");
+				return;
+			}
 			if (chest.GetInt(ZDOVars.s_inUse, 0) != 0)
 			{
 				if (peer != null)
@@ -1076,6 +1117,12 @@ namespace Valheim_Serverside.Features
 					return;
 				}
 				state.ownerSince = 0f;
+				// Taken back now and weighed on the next tick, by when an open that the player's game granted itself meanwhile
+				// has arrived (see the top of the file).
+				chest.SetOwner(server);
+				state.takenAt = now;
+				state.takenRevision = chest.OwnerRevision;
+				return;
 			}
 			if (chest.GetOwner() != server)
 			{
@@ -1134,14 +1181,19 @@ namespace Valheim_Serverside.Features
 			double hours = 0d;
 			int trades = 0;
 			Offer unfit = null;
+			bool capped = false;
 			double wardHave = RemainingHours(ward);
+			double capHours = WardCapDays * 24d;
 			foreach (Offer offer in s_offers)
 			{
-				while (unfit == null && trades < 500 && PaidInFull(offer))
+				// After goods that did not fit, only an offer of the ward (it needs no room) is still weighed.
+				while ((unfit == null || offer.hours > 0d) && trades < 500 && PaidInFull(offer))
 				{
-					// A ward that is already off for as long as it can be is not paid for again: the trophies stay in the chest.
-					if (offer.hours > 0d && wardHave + hours >= WardCapDays * 24d - 0.001d)
+					// The ward is off for at most seven days from now: an offer whose hours do not all fit is not taken, and
+					// its trophies stay in the chest.
+					if (offer.hours > 0d && wardHave + hours + offer.hours > capHours + 0.001d)
 					{
+						capped = true;
 						break;
 					}
 					byte[] before = null;
@@ -1177,10 +1229,6 @@ namespace Valheim_Serverside.Features
 					}
 					trades++;
 				}
-				if (unfit != null)
-				{
-					break;
-				}
 			}
 
 			ZNetPeer user = state.lastUser != 0L ? ZNet.instance.GetPeer(state.lastUser) : null;
@@ -1191,6 +1239,7 @@ namespace Valheim_Serverside.Features
 				inventory.Save(package);
 				chest.Set(ZDOVars.s_items, package.GetArray());
 				state.done = chest.DataRevision;
+				state.lockedUntil = Time.time + WriteLockSeconds;
 				if (got.Count > 0)
 				{
 					lines.Add(Format(Configuration.dvergrTradeMessageTrade.Value, "{paid}", Listing(paid), "{got}", Listing(got)));
@@ -1211,7 +1260,11 @@ namespace Valheim_Serverside.Features
 			{
 				lines.Add(Format(Configuration.dvergrTradeMessageFull.Value, "{got}", Times(unfit.rewardCount, Token(unfit.rewardName))));
 			}
-			else if (trades == 0)
+			if (capped)
+			{
+				lines.Add(Format(Configuration.dvergrTradeMessageWardMax.Value, "{hours}", Hours(wardHave + hours), "{max}", Hours(capHours)));
+			}
+			if (unfit == null && !capped && trades == 0)
 			{
 				string missing = Missing();
 				if (missing.Length > 0)
@@ -1503,6 +1556,30 @@ namespace Valheim_Serverside.Features
 		[HarmonyPatch(typeof(Container), "RPC_RequestOpen")]
 		public static class Container_RPC_RequestOpen_Patch
 		{
+			// Just after the server has written a trade chest, an open is answered "in use" (see the top of the file).
+			static bool Prefix(Container __instance, long uid)
+			{
+				if (!Configuration.dvergrTradeEnabled.Value || !s_ready || !ZNet.instance || !ZNet.instance.IsServer())
+				{
+					return true;
+				}
+				try
+				{
+					ZNetView view = __instance.GetComponent<ZNetView>();
+					ZDO zdo = view && view.IsValid() ? view.GetZDO() : null;
+					if (zdo != null && view.IsOwner() && zdo.GetInt(s_keyTrade, 0) == 1 && s_chests.TryGetValue(zdo.m_uid, out ChestState state) && Time.time < state.lockedUntil)
+					{
+						view.InvokeRPC(uid, "RPC_OpenResponse", false);
+						return false;
+					}
+				}
+				catch (Exception e)
+				{
+					Fault(e);
+				}
+				return true;
+			}
+
 			static void Postfix(Container __instance, long uid)
 			{
 				if (!Configuration.dvergrTradeEnabled.Value || !s_ready || !ZNet.instance || !ZNet.instance.IsServer())
@@ -1552,6 +1629,31 @@ namespace Valheim_Serverside.Features
 				catch (Exception e)
 				{
 					Fault(e);
+				}
+			}
+		}
+
+		// A dvergr ward that is switched off takes no damage: off, it passes no damage on to the camp's anger, so it could be
+		// broken without a fight, and the camp would lose its stand.
+		[HarmonyPatch(typeof(WearNTear), "RPC_Damage")]
+		public static class WearNTear_RPC_Damage_Patch
+		{
+			static bool Prefix(WearNTear __instance)
+			{
+				if (s_off.Count == 0 || !ZNet.instance || !ZNet.instance.IsServer())
+				{
+					return true;
+				}
+				try
+				{
+					ZNetView view = __instance.GetComponent<ZNetView>();
+					ZDO zdo = view && view.IsValid() ? view.GetZDO() : null;
+					return zdo == null || !s_off.ContainsKey(zdo.m_uid) || zdo.GetLong(s_keyOff, 0L) <= ZNet.instance.GetTime().Ticks;
+				}
+				catch (Exception e)
+				{
+					Fault(e);
+					return true;
 				}
 			}
 		}
