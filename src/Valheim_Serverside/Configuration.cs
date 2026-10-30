@@ -152,6 +152,7 @@ namespace PluginConfiguration
 
 		public static ConfigEntry<bool> dvergrTradeEnabled;
 		public static ConfigEntry<string> dvergrTradeOffers;
+		public static ConfigEntry<string> dvergrTradeOffersAshlands;
 		public static ConfigEntry<float> dvergrTradeStandRange;
 		public static ConfigEntry<string> dvergrTradeSignTitle;
 		public static ConfigEntry<string> dvergrTradeSignLanguage;
@@ -483,6 +484,8 @@ namespace PluginConfiguration
 				"Let players buy from the dvergr of the Mistlands for trophies, and have a camp's ward switched off. Next to each dvergr ward (the guard towers, the lighthouse, the excavations, the harbour, the charred tower) the server puts up a chest and a sign; what a player puts into the chest and closes is weighed against Offers, the price taken and the goods left in its place. An offer can also switch the camp's ward off for some hours (and calm the dvergr that are angry), so what lies in the camp can be taken without anyone being attacked. Vanilla clients: nothing to install. Needs a restart to switch on; switching it off puts up nothing new and takes nothing down (wards that are off still come back on in time). See the README.");
 			dvergrTradeOffers = config.Bind<string>("DvergrTrade", "Offers", "TrophySeeker:3 > BlackMarble:20, TrophyTick:2 > Softtissue:10, TrophyGjall:1 > BlackCore:2, TrophyHare:1 > Lantern:1, TrophySeekerBrute:1 > Ward:24",
 				"What the dvergr trade, comma separated: `price > reward`. The price is one or more `Prefab:count` joined by `+`; the reward is `Prefab:count` (an item) or `Ward:<hours>` (the camp's ward off for so many hours, decimals allowed, at most 7 days from now in all). Offers are paid in this order, each as many times as it is paid in full. Two offers that take the same item: the first wins, the other is skipped with a warning, as is an unknown item.");
+			dvergrTradeOffersAshlands = config.Bind<string>("DvergrTrade", "OffersAshlands", "TrophyCharredMelee:3 > Grausten:20, TrophyAsksvin:2 > FlametalOreNew:5, TrophyMorgen:1 > MoltenCore:2, TrophyVolture:1 > Lantern:1, TrophyFallenValkyrie:1 > Ward:24",
+				"What the dvergr of the Ashlands trade (the charred tower), written as Offers: the goods and trophies of their own land. Offers holds for the Mistlands. Empty, or not one offer in it valid (the log names what was skipped): Offers holds for the Ashlands too.");
 			dvergrTradeStandRange = config.Bind<float>("DvergrTrade", "StandRange", 48f,
 				new ConfigDescription("Metres, sideways: a player this close to a dvergr ward makes the server put up that camp's chest and sign (and tell the players this close when its ward goes off and on).",
 					new AcceptableValueRange<float>(8f, 200f)));

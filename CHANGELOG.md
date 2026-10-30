@@ -1,3 +1,15 @@
+## [1.25.0] - 2026-10-30
+
+### Added
+
+- `[DvergrTrade] OffersAshlands`: the dvergr of the Ashlands' charred tower (`CharredTowerRuins1_dvergr`) have a price list of
+  their own, on the sign and in the chest: `TrophyCharredMelee:3 > Grausten:20, TrophyAsksvin:2 > FlametalOreNew:5,
+  TrophyMorgen:1 > MoltenCore:2, TrophyVolture:1 > Lantern:1, TrophyFallenValkyrie:1 > Ward:24`, written as `Offers`. Up to
+  1.24.0 every camp had the one list, so a camp in the Ashlands sold black marble and black cores for seeker trophies. A camp
+  goes by the land its location is placed for, not by the ground under its ward. Empty, or not one offer in it valid (the log names what was skipped): `Offers` holds for the Ashlands too. A sign
+  standing since 1.24.0 is rewritten when a player next comes near. A warning about an offer names its list, and one in both
+  lists is given for each.
+
 ## [1.24.0] - 2026-10-24
 
 ### Added

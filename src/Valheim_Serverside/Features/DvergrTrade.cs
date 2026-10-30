@@ -62,6 +62,9 @@ namespace Valheim_Serverside.Features
 		time is the server's (ZNet), which stands still while nobody is online and jumps when the players sleep, as the
 		game's own timers do.
 
+		The prices: one list for the camps of the Mistlands (Offers) and one for the charred tower of the Ashlands (OffersAshlands; empty: the same
+		list), by the land the game placed the camp's location for: goods and trophies of the land the camp stands in, on its sign and in its chest.
+
 		Not here: coins, a trade window, prices per camp, taking the stands down when the feature is switched off.
 	*/
 	public class DvergrTrade : IFeature
@@ -141,9 +144,18 @@ namespace Valheim_Serverside.Features
 		private static float s_campRadius = 64f;
 		private static readonly HashSet<int> s_dvergr = new HashSet<int>();
 
-		private static List<Offer> s_offers = new List<Offer>();
-		private static string s_offersFrom;
-		private static int s_offersVersion;
+		// A price list as read from the config, with the text of the sign it makes.
+		private class Prices
+		{
+			public List<Offer> offers = new List<Offer>();
+			public string from;
+			public int version;
+			public string signKey;
+			public string signText;
+		}
+
+		private static readonly Prices s_prices = new Prices();
+		private static readonly Prices s_pricesAshlands = new Prices();
 
 		private static readonly List<ZDOID> s_wardIds = new List<ZDOID>();
 		private static readonly List<ZDOID> s_scanIds = new List<ZDOID>();
@@ -167,8 +179,6 @@ namespace Valheim_Serverside.Features
 		private static string s_namesLanguage = "";
 		private static Dictionary<string, string> s_signWords;
 		private static readonly HashSet<string> s_logged = new HashSet<string>();
-		private static string s_signKey;
-		private static string s_signText;
 		private static float s_nextWardTick;
 		private static float s_nextStandTick;
 		private static int s_errors;
@@ -269,13 +279,33 @@ namespace Valheim_Serverside.Features
 		// "TrophySeeker:3 > BlackMarble:20, TrophySeekerBrute:1 > Ward:24" -> the offers; read again when the configured text changes.
 		private static void RefreshOffers()
 		{
-			string text = Configuration.dvergrTradeOffers.Value ?? "";
-			if (s_offersFrom == text)
+			RefreshOffers(s_prices, Configuration.dvergrTradeOffers.Value, "Offers", "offer(s)");
+			RefreshOffers(s_pricesAshlands, Configuration.dvergrTradeOffersAshlands.Value, "OffersAshlands", "offer(s) for the Ashlands");
+		}
+
+		// The list of the camp this ward belongs to. By the land its location is placed for, not the ground under the ward: that can be a neighbour's at the edge of a biome.
+		private static Prices PricesOf(ZDO ward)
+		{
+			if (s_pricesAshlands.offers.Count == 0)
+			{
+				return s_prices;
+			}
+			Vector3 at = ward.GetPosition();
+			Heightmap.Biome land = ZoneSystem.instance.m_locationInstances.TryGetValue(ZoneSystem.GetZone(at), out ZoneSystem.LocationInstance camp) && camp.m_location != null
+				? camp.m_location.m_biome
+				: WorldGenerator.instance.GetBiome(at);
+			return land == Heightmap.Biome.AshLands ? s_pricesAshlands : s_prices;
+		}
+
+		private static void RefreshOffers(Prices prices, string config, string setting, string what)
+		{
+			string text = config ?? "";
+			if (prices.from == text)
 			{
 				return;
 			}
-			s_offersFrom = text;
-			s_offersVersion++;
+			prices.from = text;
+			prices.version++;
 			List<Offer> offers = new List<Offer>();
 			HashSet<string> priced = new HashSet<string>();
 			foreach (string raw in text.Split(','))
@@ -288,7 +318,7 @@ namespace Valheim_Serverside.Features
 				int arrow = entry.IndexOf('>');
 				if (arrow < 0)
 				{
-					WarnOnce("offer/" + entry, $"DvergrTrade: the offer '{entry}' has no '>' between its price and its reward; skipped");
+					WarnOnce("offer/" + setting + "/" + entry, $"DvergrTrade: {setting}: the offer '{entry}' has no '>' between its price and its reward; skipped");
 					continue;
 				}
 				Offer offer = new Offer();
@@ -299,7 +329,7 @@ namespace Valheim_Serverside.Features
 				{
 					if (!SplitCount(part, out string name, out int count) || !IsItem(name))
 					{
-						WarnOnce("offer/" + entry, $"DvergrTrade: the offer '{entry}': '{part.Trim()}' is not an item with a count; skipped");
+						WarnOnce("offer/" + setting + "/" + entry, $"DvergrTrade: {setting}: the offer '{entry}': '{part.Trim()}' is not an item with a count; skipped");
 						valid = false;
 						break;
 					}
@@ -321,7 +351,7 @@ namespace Valheim_Serverside.Features
 				string reward = entry.Substring(arrow + 1).Trim();
 				if (!SplitCount(reward, out string rewardName, out int rewardCount, true))
 				{
-					WarnOnce("offer/" + entry, $"DvergrTrade: the offer '{entry}': the reward '{reward}' is not an item with a count, nor Ward:<hours>; skipped");
+					WarnOnce("offer/" + setting + "/" + entry, $"DvergrTrade: {setting}: the offer '{entry}': the reward '{reward}' is not an item with a count, nor Ward:<hours>; skipped");
 					continue;
 				}
 				if (string.Equals(rewardName, "Ward", StringComparison.OrdinalIgnoreCase))
@@ -329,14 +359,14 @@ namespace Valheim_Serverside.Features
 					int colon = reward.LastIndexOf(':');
 					if (colon < 0 || !double.TryParse(reward.Substring(colon + 1).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double hours) || hours <= 0d || double.IsInfinity(hours))
 					{
-						WarnOnce("offer/" + entry, $"DvergrTrade: the offer '{entry}': Ward needs hours above 0 (Ward:24, Ward:1.5); skipped");
+						WarnOnce("offer/" + setting + "/" + entry, $"DvergrTrade: {setting}: the offer '{entry}': Ward needs hours above 0 (Ward:24, Ward:1.5); skipped");
 						continue;
 					}
 					offer.hours = hours;
 				}
 				else if (!IsItem(rewardName))
 				{
-					WarnOnce("offer/" + entry, $"DvergrTrade: the offer '{entry}': the game has no item '{rewardName}'; skipped");
+					WarnOnce("offer/" + setting + "/" + entry, $"DvergrTrade: {setting}: the offer '{entry}': the game has no item '{rewardName}'; skipped");
 					continue;
 				}
 				offer.priceNames = names.ToArray();
@@ -355,7 +385,7 @@ namespace Valheim_Serverside.Features
 				}
 				if (shared != null)
 				{
-					WarnOnce("offer/" + entry, $"DvergrTrade: the offer '{entry}' takes {shared}, which an offer before it already takes; the first in the list wins, this one is skipped");
+					WarnOnce("offer/" + setting + "/" + entry, $"DvergrTrade: {setting}: the offer '{entry}' takes {shared}, which an offer before it already takes; the first in the list wins, this one is skipped");
 					continue;
 				}
 				foreach (string name in offer.priceNames)
@@ -364,8 +394,8 @@ namespace Valheim_Serverside.Features
 				}
 				offers.Add(offer);
 			}
-			s_offers = offers;
-			ServersidePlugin.logger.LogInfo($"DvergrTrade: {offers.Count} offer(s): {string.Join("; ", offers.ConvertAll(o => DescribePlain(o)))}");
+			prices.offers = offers;
+			ServersidePlugin.logger.LogInfo($"DvergrTrade: {offers.Count} {what}: {string.Join("; ", offers.ConvertAll(o => DescribePlain(o)))}");
 		}
 
 		// "Name:count" or just "Name" (count 1). With allowWard the name may be Ward and the count is not read here.
@@ -524,26 +554,26 @@ namespace Valheim_Serverside.Features
 			return text.ToString();
 		}
 
-		private static string SignText()
+		private static string SignText(Prices prices)
 		{
-			string key = s_offersVersion + "|" + Configuration.dvergrTradeSignTitle.Value + "|" + Configuration.dvergrTradeSignLanguage.Value + "|" + Configuration.dvergrTradeSignTextSize.Value + "|" + Configuration.dvergrTradeWardOffText.Value;
-			if (key == s_signKey)
+			string key = prices.version + "|" + Configuration.dvergrTradeSignTitle.Value + "|" + Configuration.dvergrTradeSignLanguage.Value + "|" + Configuration.dvergrTradeSignTextSize.Value + "|" + Configuration.dvergrTradeWardOffText.Value;
+			if (key == prices.signKey)
 			{
-				return s_signText;
+				return prices.signText;
 			}
 			// the game sizes a sign's text to fill its board, so it grew until one line broke ("... na 24" over "h"): each line in
 			// <nobr> keeps it whole, and the text is sized to the longest instead (the hover text drops the tags)
 			StringBuilder text = new StringBuilder();
 			text.Append("<size=").Append(Configuration.dvergrTradeSignTextSize.Value).Append("%><nobr>").Append(Configuration.dvergrTradeSignTitle.Value).Append("</nobr>");
-			foreach (Offer offer in s_offers)
+			foreach (Offer offer in prices.offers)
 			{
 				text.Append("\n<nobr>").Append(DescribeSign(offer)).Append("</nobr>");
 			}
 			text.Append("</size>");
-			s_signKey = key;
-			s_signText = text.ToString();
-			ServersidePlugin.logger.LogInfo($"DvergrTrade: the sign reads: {s_signText.RemoveRichTextTags().Replace("\n", " / ")}");
-			return s_signText;
+			prices.signKey = key;
+			prices.signText = text.ToString();
+			ServersidePlugin.logger.LogInfo($"DvergrTrade: the sign{(prices == s_pricesAshlands ? " in the Ashlands" : "")} reads: {prices.signText.RemoveRichTextTags().Replace("\n", " / ")}");
+			return prices.signText;
 		}
 
 		// ---- The wards ------------------------------------------------------------------------------------------------
@@ -813,7 +843,7 @@ namespace Valheim_Serverside.Features
 				stand.madeBefore = true;
 				stand.missingSince = 0f;
 				ZDO sign = ZDOMan.instance.GetZDO(stand.sign);
-				string text = SignText();
+				string text = SignText(PricesOf(ward));
 				if (sign.GetString(ZDOVars.s_text, "") != text)
 				{
 					// Someone has written on it (possible while the ward is off), or the offers changed.
@@ -957,7 +987,7 @@ namespace Valheim_Serverside.Features
 					chest.Set(ZDOVars.s_cheated, 1);
 					chest.Set(s_keyTrade, 1);
 					ZDO sign = CreateObject(s_signHash, signAt, rotation);
-					sign.Set(ZDOVars.s_text, SignText());
+					sign.Set(ZDOVars.s_text, SignText(PricesOf(ward)));
 					sign.Set(s_keyTrade, 2);
 					stand.chest = chest.m_uid;
 					stand.sign = sign.m_uid;
@@ -984,7 +1014,7 @@ namespace Valheim_Serverside.Features
 			if (haveChest)
 			{
 				ZDO sign = CreateObject(s_signHash, other.GetPosition() + side + Vector3.up * SignLift, rotation);
-				sign.Set(ZDOVars.s_text, SignText());
+				sign.Set(ZDOVars.s_text, SignText(PricesOf(ward)));
 				sign.Set(s_keyTrade, 2);
 				stand.sign = sign.m_uid;
 			}
@@ -1072,7 +1102,7 @@ namespace Valheim_Serverside.Features
 		// Every second, for a stand's chest near a player: take it back from the player's game once closed, and weigh what is in it.
 		private static void Trade(ZDO ward, Stand stand)
 		{
-			if (!Exists(stand.chest, s_chestHash) || s_offers.Count == 0)
+			if (!Exists(stand.chest, s_chestHash) || PricesOf(ward).offers.Count == 0)
 			{
 				return;
 			}
@@ -1164,8 +1194,9 @@ namespace Valheim_Serverside.Features
 			Inventory inventory = new Inventory("DvergrTrade", null, s_chestWidth, s_chestHeight);
 			inventory.Load(new ZPackage(bytes));
 			Recount(inventory);
+			List<Offer> offers = PricesOf(ward).offers;
 			bool anyPrice = false;
-			foreach (Offer offer in s_offers)
+			foreach (Offer offer in offers)
 			{
 				foreach (string name in offer.priceNames)
 				{
@@ -1188,7 +1219,7 @@ namespace Valheim_Serverside.Features
 			bool capped = false;
 			double wardHave = RemainingHours(ward);
 			double capHours = WardCapDays * 24d;
-			foreach (Offer offer in s_offers)
+			foreach (Offer offer in offers)
 			{
 				// After goods that did not fit, only an offer of the ward (it needs no room) is still weighed.
 				while ((unfit == null || offer.hours > 0d) && trades < 500 && PaidInFull(offer))
@@ -1270,7 +1301,7 @@ namespace Valheim_Serverside.Features
 			}
 			if (unfit == null && !capped && trades == 0)
 			{
-				string missing = Missing();
+				string missing = Missing(offers);
 				if (missing.Length > 0)
 				{
 					lines.Add(Format(Configuration.dvergrTradeMessageMissing.Value, "{missing}", missing));
@@ -1388,9 +1419,9 @@ namespace Valheim_Serverside.Features
 		}
 
 		// What the first offer that has any of its price in the chest still lacks.
-		private static string Missing()
+		private static string Missing(List<Offer> offers)
 		{
-			foreach (Offer offer in s_offers)
+			foreach (Offer offer in offers)
 			{
 				bool any = false;
 				foreach (string name in offer.priceNames)
@@ -1459,7 +1490,7 @@ namespace Valheim_Serverside.Features
 				}
 			}
 			StringBuilder offers = new StringBuilder();
-			foreach (Offer offer in s_offers)
+			foreach (Offer offer in (ward != null ? PricesOf(ward) : s_prices).offers)
 			{
 				offers.Append(offers.Length > 0 ? "\n" : "").Append(DescribeToken(offer));
 			}
