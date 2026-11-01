@@ -1,3 +1,30 @@
+## [1.27.0] - 2026-11-01
+
+### Added
+
+- Console commands that act on a player: the server's versions of the game's own, which cannot work on a dedicated server.
+  - `tp <player|all> <x> <z>` (also `teleport`, `goto`) sends the player there with the game's own teleport. That is the
+    message vanilla's `recall` sends, so a vanilla game obeys it. The height is 30, the one the game's own `goto` uses.
+    About 15 s later the game puts the player on top of whatever stands there (the ground, a roof, a rock); at sea, in the
+    water. The other forms:
+    - `tp <player|all> <x> <y> <z>` uses that height; after 8 s the game puts the player on the floor below it.
+    - `x,z` or `x,y,z` may be written as one word, as `players` and `pos` print them.
+    - `tp <player|all> start` sends the player 2 m above the middle of the start, where a new character first appears.
+    - `tp <player|all> to <player>` sends the player where that player stands, facing as they do.
+
+    A name may contain spaces and may be a unique beginning; `all` is everyone online, but the player sent to. The console
+    says whom it sent from where. Once the character is there, it says where and with what health. If the character is not
+    there after 40 s, it says so: their game did not move them, because the player is dead, in a menu or already
+    teleporting. A game takes the first of several teleports sent at once and refuses the rest.
+  - `pos [player|all]` (also `where`) prints where each player is, the biome (or "in a dungeon") and their health.
+  - `heal <player|all> [amount]` heals to full health, or by that amount. It heals health only: the game has no message for
+    another player's stamina. A dead player is not healed.
+  - `spawn <prefab> [amount] [level] <player>` does what the game's own `spawn` does in front of its own player, 3 m in
+    front of that player: level 1 to 9, at most `[Server] MaxSpawnAmount` (new, 20) at once, marked as cheated as the game
+    marks its own, so what such a creature drops is cheated too. Items go through `give`; players cannot be spawned.
+- `[AntiCheat]` Teleport and Speed do not count the console's teleports. For a minute after the console sends a player
+  somewhere, the character's moves within 50 m of any spot it was sent to are not judged.
+
 ## [1.26.0] - 2026-11-01
 
 ### Added

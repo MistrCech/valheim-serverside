@@ -29,6 +29,7 @@ namespace PluginConfiguration
 		public static ConfigEntry<int> serverTargetFps;
 
 		public static ConfigEntry<int> maxGiveAmount;
+		public static ConfigEntry<int> maxSpawnAmount;
 		public static ConfigEntry<int> consoleInputCodePage;
 
 		public static ConfigEntry<bool> fixSaveClientChanges;
@@ -194,9 +195,11 @@ namespace PluginConfiguration
 				"Every this many minutes, log per player how often their send queue was full. 0 disables.");
 
 			consoleCommandsEnabled = config.Bind<bool>("Server", "ConsoleCommands", true,
-				"Read commands from standard input: save, stop, players, give <item> <amount> <player>, broadcast <text> (in it \\n is a line break and \\u010d the letter with that code, whatever the panel does to accents; \\\\ is a backslash), event <name> <player>, events, help; anything else goes to the game's own console (kick, ban, unban, banned, stopevent, devcommands, skiptime ...). In AMP set App.HasWriteableConsole=True to type them into its console, and App.ExitMethod=String with App.ExitString=stop to shut down cleanly. On Windows also set [Logging.Console] Enabled = false in BepInEx.cfg, or BepInEx's own console takes over standard input.");
+				"Read commands from standard input: save, stop, players, give <item> <amount> <player>, broadcast <text> (in it \\n is a line break and \\u010d the letter with that code, whatever the panel does to accents; \\\\ is a backslash), event <name> <player>, events, tp <player|all> <x> <z> | <x> <y> <z> | start | to <player>, pos [player|all], heal <player|all> [amount], spawn <prefab> [amount] [level] <player>, help; anything else goes to the game's own console (kick, ban, unban, banned, stopevent, devcommands, skiptime ...). In AMP set App.HasWriteableConsole=True to type them into its console, and App.ExitMethod=String with App.ExitString=stop to shut down cleanly. On Windows also set [Logging.Console] Enabled = false in BepInEx.cfg, or BepInEx's own console takes over standard input.");
 			maxGiveAmount = config.Bind<int>("Server", "MaxGiveAmount", 1000,
 				"Most items one give command may drop.");
+			maxSpawnAmount = config.Bind<int>("Server", "MaxSpawnAmount", 20,
+				"Most creatures or objects one spawn command may make.");
 			consoleInputCodePage = config.Bind<int>("Server", "ConsoleInputCodePage", 852,
 				new ConfigDescription("How to read a console line that is not valid UTF-8 (UTF-8 is always tried first). Panels on Windows write their OEM code page instead: AMP was seen writing 850 (Western), whose á é í ó ú ý and their capitals have the same bytes in 852 (Central European DOS), so 852 reads them right; the letters 850 lacks (č ď ě ň ř š ť ů ž) are already plain ones when the line arrives, and broadcast takes them as \\u010d (see ConsoleCommands). Also 1250 Central European (Windows), 1252 Western, 65001 UTF-8 only. The log says which bytes arrived the first time this is needed.",
 					new AcceptableValueList<int>(1250, 852, 1252, 65001)));

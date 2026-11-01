@@ -289,6 +289,10 @@ namespace Valheim_Serverside.Features
 		}
 
 		private static readonly Dictionary<long, Track> s_tracks = new Dictionary<long, Track>();
+		// Teleports the server itself sent (the console's tp), by player: where to and when.
+		private static readonly Dictionary<long, List<KeyValuePair<Vector3, float>>> s_serverMoves = new Dictionary<long, List<KeyValuePair<Vector3, float>>>();
+		private const float ServerMoveSeconds = 60f;
+		private const float ServerMoveMetres = 50f;
 		private static readonly Dictionary<string, Tally> s_tallies = new Dictionary<string, Tally>();
 		private static readonly Dictionary<string, float> s_rate = new Dictionary<string, float>();
 		private static readonly int[] s_hits = new int[Enum.GetValues(typeof(Rule)).Length];
@@ -825,6 +829,21 @@ namespace Valheim_Serverside.Features
 			}
 		}
 
+		// The console sent a player to `to` (AdminCommands.Teleport): for a minute, their character's moves while it is within 50 m of
+		// there are not judged (Teleport, Speed). The game's own teleport puts the character there after 2 s and onto the ground after 8 to 15.
+		public static void ServerMoved(long user, Vector3 to)
+		{
+			foreach (long gone in s_serverMoves.Keys.Where(u => s_serverMoves[u].All(m => Time.time - m.Value > ServerMoveSeconds)).ToList())
+			{
+				s_serverMoves.Remove(gone);
+			}
+			if (!s_serverMoves.TryGetValue(user, out List<KeyValuePair<Vector3, float>> sent))
+			{
+				s_serverMoves[user] = sent = new List<KeyValuePair<Vector3, float>>();
+			}
+			sent.Add(new KeyValuePair<Vector3, float>(to, Time.time));
+		}
+
 		// Where the character was two seconds ago and where it is. A jump of hundreds of metres in a moment is a teleport, which in the game
 		// is a portal (in the middle of the base or at a dungeon's door), a dungeon, or a respawn (a new character object). A run that
 		// is faster than anything the game offers (the fastest ship under a good wind is about 15 m/s) is only counted if it lasts.
@@ -834,6 +853,21 @@ namespace Valheim_Serverside.Features
 			long user = peer.m_uid;
 			s_tracks.TryGetValue(user, out Track before);
 			Track track = new Track { pos = now, at = Time.time, id = character.m_uid, fast = 0 };
+			if (s_serverMoves.TryGetValue(user, out List<KeyValuePair<Vector3, float>> sent))
+			{
+				// The server sent this player there: the jump, and the drop onto the ground some seconds later, are not theirs.
+				// Every spot sent in the last minute counts, as the game takes the first of several sent at once and refuses the rest.
+				sent.RemoveAll(m => Time.time - m.Value > ServerMoveSeconds);
+				if (sent.Count == 0)
+				{
+					s_serverMoves.Remove(user);
+				}
+				else if (sent.Any(m => new Vector2(now.x - m.Key.x, now.z - m.Key.z).magnitude < ServerMoveMetres))
+				{
+					s_tracks[user] = track;
+					return;
+				}
+			}
 			if (before.id == character.m_uid && before.at > 0f)
 			{
 				float seconds = Time.time - before.at;
