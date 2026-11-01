@@ -1,3 +1,21 @@
+## [1.26.0] - 2026-11-01
+
+### Added
+
+- `[PortalLock] Protect` (default false) and `ProtectMessage`: who may hit a portal or take it down with the hammer. Where a
+  ward holds the portal (it covers it and has its builder on its list, switched on or off -- as for who may use it), the
+  ward's owner and the players on its list; where no ward holds it but one holds the other end of its pair, that ward's
+  list too, so the far end of a base's pair out in the open can no longer be smashed to cut the base off; where no ward
+  holds either end, anyone, as in the game. Admins always (`ExemptAdmins`). A refused hit (`RPC_Damage`) or removal
+  (`RPC_Remove`) is not passed on to the game that owns the portal, or not handled where the server owns it; the player is
+  told (`ProtectMessage`, at most once a quarter of an hour per portal) and `<world>.guard.log` gets a line (once a minute
+  per player, portal and kind, with a count). A hit from a player's game counts whatever made it -- a weapon, a catapult or
+  a battering ram (their hits name no attacker), fire; only a hit by a creature that game runs (a raid) goes through.
+  Repairs are not held back. In the game a ward keeps only the hammer off what stands in it, and nothing guards a portal
+  out in the open.
+- The vanilla drift check also watches `WearNTear.Damage` and `Remove`, which `Protect` relies on to send both requests to
+  the game that owns the piece.
+
 ## [1.25.0] - 2026-10-30
 
 ### Added

@@ -57,6 +57,10 @@ namespace Valheim_Serverside
 			// Not replaced, but read by hand: the ward guard parses the routed RPC packet and keys on RPC names.
 			{ AccessTools.Method(typeof(ZRoutedRpc), "RPC_RoutedRPC"), new[] { "RoutedRPCData::.ctor", "RoutedRPCData::Deserialize", "ZRoutedRpc::HandleRoutedRPC", "ZRoutedRpc::RouteRPC" } },
 			{ AccessTools.Method(typeof(ZRoutedRpc.RoutedRPCData), "Deserialize"), new[] { "ZPackage::ReadInt", "ZPackage::ReadLong", "ZPackage::ReadPackage", "ZPackage::ReadZDOID" } },
+			// Not replaced, but relied on: the portal lock's Protect judges hits and hammer removals of portals where they pass the server, and
+			// they do because a player's game sends both to the game that owns the piece (which the lock never lets a stranger's game be).
+			{ AccessTools.Method(typeof(WearNTear), "Damage"), new[] { "ZNetView::InvokeRPC", "ZNetView::IsValid" } },
+			{ AccessTools.Method(typeof(WearNTear), "Remove"), new[] { "ZNetView::InvokeRPC", "ZNetView::IsValid" } },
 			{ AccessTools.Method(typeof(Ship), "UpdateOwner"), new[] {
 				"Ship::GetNewOwnerID", "Ship::IsPlayerInBoat", "Ship::RefreshPlayerList", "ZDO::SetOwner",
 				"ZLog::Log", "ZNetView::GetZDO", "ZNetView::IsOwner", "ZNetView::IsValid",

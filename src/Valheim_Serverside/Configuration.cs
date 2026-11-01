@@ -68,6 +68,8 @@ namespace PluginConfiguration
 		public static ConfigEntry<string> portalLockKeepClear;
 		public static ConfigEntry<float> portalLockKeepClearRadius;
 		public static ConfigEntry<string> portalLockKeepClearMessage;
+		public static ConfigEntry<bool> portalLockProtect;
+		public static ConfigEntry<string> portalLockProtectMessage;
 
 		public static ConfigEntry<bool> wardGuardEnabled;
 		public static ConfigEntry<Valheim_Serverside.Features.WardGuard.Mode> wardGuardStructures;
@@ -308,6 +310,10 @@ namespace PluginConfiguration
 				"How far, in metres sideways, from the place of any location in KeepClear a public portal may not stand. A player-built portal there does not count as public (its builder and the ward's list use it) and cannot be given a public name; a portal nobody built (admin-spawned) is not held to it. 0: the rule is off.");
 			portalLockKeepClearMessage = config.Bind<string>("PortalLock", "KeepClearMessage", "A public portal cannot stand within {0} m of the spawn, a boss altar or a trader. Name it without the public prefix, or move it.",
 				"Shown in the middle of the screen of a player whose portal is refused a public name there. {0} is the radius. Empty: no message.");
+			portalLockProtect = config.Bind<bool>("PortalLock", "Protect", false,
+				"Who may hit a portal or take it down with the hammer. In the game a ward only keeps the hammer off what stands in it, and nothing guards a portal out in the open, so the far end of a base's pair can be smashed by anyone and cut the base off. Here, where a ward holds a portal (it covers it and has its builder on its list, as for who may use it; switched on or off), only the ward's owner and the players on its list may; where no ward holds a portal but one holds the other end of its pair, that ward's list decides for it too; where no ward holds either end, anyone, as in the game. Admins always (ExemptAdmins). The server drops the hits (any weapon, a catapult, a battering ram, fire) and removals of everyone else; hits by creatures (a raid, a monster) and repairs are left alone. Every refusal is written to <world>.guard.log. Needs Enabled.");
+			portalLockProtectMessage = config.Bind<string>("PortalLock", "ProtectMessage", "This portal belongs to a warded base: only the ward's owner and the players on its list can damage or remove it.",
+				"Shown in the middle of the screen of a player whose hit or removal of a protected portal is refused, at most once a quarter of an hour per portal. Empty: no message.");
 
 			wardGuardEnabled = config.Bind<bool>("WardGuard", "Enabled", false,
 				"Make the server enforce the ward (guard stone). In the game every check of a ward is made in the acting player's own game, nothing stops a weapon from damaging a warded build (the ward only flashes), and smelters, cooking stations, fireplaces, crops, beds and stands have no ward check at all. Here the server judges the RPCs players' games send it, by the player the connection belongs to and the game's own rule: where an enabled ward covers the place, the owner of the ward and the players on its list may act, nobody else. Admins, creatures of a raid and anything the game does by itself are not touched. Every refusal is written to <world>.guard.log. Needs a restart to switch on (the patches are applied at startup); switching it off takes effect at once. See the README.");

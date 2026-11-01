@@ -55,6 +55,23 @@ namespace Valheim_Serverside.Features
 		  owns the portal, and data from anyone else for it is not taken.
 		- A player who may not manage a portal is never given it (ZDO.SetOwner on the server), and one
 		  whose game still owns it loses it within seconds.
+
+		Who may hit a portal or take it down with the hammer (Protect): in the game a ward only keeps the
+		hammer off what stands in it, each player's game deciding for itself, and nothing at all guards a
+		portal out in the open -- so the far end of a base's pair could be smashed by anyone, and the warded
+		end by anyone with a weapon. Here:
+		- where a ward holds the portal (as above: it covers it and has its builder on its list), the owner
+		  and the players on that ward's list; an end with a ward of its own keeps its own list;
+		- where no ward holds it but one holds the other end of its pair, that ward's list: the far end in
+		  the open is protected as if the ward stood over it;
+		- where no ward holds either end, anyone, as in the game. Admins always (ExemptAdmins).
+		Both requests go to the game that owns the portal (WearNTear.Damage and Remove: RPC_Damage and
+		RPC_Remove), and that is never the game of a player who may not manage the pair (above), so they pass
+		the server: a request from anyone else is not passed on (ZRoutedRpc.RouteRPC), or not handled where
+		the server owns the portal. A hit from a player's game counts whatever it was made with -- a weapon,
+		a catapult or a battering ram (their hits name no attacker), fire, a tree they cut; only a hit by a
+		creature that their game runs (a raid, a monster) is the game's own and goes through. Repairs are not
+		held back. Every refusal is written to <world>.guard.log.
 	*/
 	public class PortalLock : IFeature
 	{
@@ -88,6 +105,12 @@ namespace Valheim_Serverside.Features
 		// The places where a public portal may not stand (location name, position), read from the world's locations every scan.
 		private static List<KeyValuePair<string, Vector3>> s_keepClear = new List<KeyValuePair<string, Vector3>>();
 		private static readonly int s_setTag = "RPC_SetTag".GetStableHashCode();
+		private static readonly int s_damage = "RPC_Damage".GetStableHashCode();
+		private static readonly int s_remove = "RPC_Remove".GetStableHashCode();
+		// Prefab hash of every creature (a Character that is not a Player): a hit one of them makes is not a player's.
+		private static HashSet<int> s_creatures;
+		// Protect: the refusals of each player at each portal ("<peer>/<portal>/<what>") since the last line about them.
+		private static readonly Dictionary<string, Refusals> s_refusals = new Dictionary<string, Refusals>();
 		private static readonly MethodInfo s_isConnecting = AccessTools.Method(typeof(Game), "IsCurrentlyConnectingPortal");
 		private static ZNetPeer s_sendingTo;
 		private static ZNetPeer s_receivingFrom;
@@ -97,6 +120,7 @@ namespace Valheim_Serverside.Features
 			if (s_portalPrefabs == null && ZNetScene.instance && ZNetScene.instance.m_prefabs != null && ZNetScene.instance.m_prefabs.Count > 0)
 			{
 				HashSet<int> portals = new HashSet<int>();
+				HashSet<int> creatures = new HashSet<int>();
 				Dictionary<int, float> wards = new Dictionary<int, float>();
 				foreach (GameObject prefab in ZNetScene.instance.m_prefabs)
 				{
@@ -109,16 +133,24 @@ namespace Valheim_Serverside.Features
 					{
 						portals.Add(hash);
 					}
+					if (prefab.GetComponent<Character>() && !prefab.GetComponent<Player>())
+					{
+						creatures.Add(hash);
+					}
 					PrivateArea area = prefab.GetComponent<PrivateArea>();
 					if (area && area.m_ownerFaction == Character.Faction.Players)
 					{
 						wards[hash] = area.m_radius;
 					}
 				}
+				s_creatures = creatures;
 				s_wardRadius = wards;
 				s_portalPrefabs = portals;
 				ServersidePlugin.logger.LogInfo($"Portal lock: {portals.Count} kind(s) of portal; the lists of these wards decide who may use them: "
-					+ string.Join(", ", wards.Select(kv => ZNetScene.instance.GetPrefab(kv.Key).name + " " + kv.Value.ToString("0.#") + " m")));
+					+ string.Join(", ", wards.Select(kv => ZNetScene.instance.GetPrefab(kv.Key).name + " " + kv.Value.ToString("0.#") + " m"))
+					+ (Configuration.portalLockProtect.Value
+						? $"; and who may hit one or take it down, the far end of a pair included (Protect; {creatures.Count} kinds of creature whose hits are the game's)"
+						: "; who may hit one or take it down is left to the game (Protect off)"));
 			}
 			if (s_portalPrefabs == null || s_portalPrefabs.Count == 0 || ZDOMan.instance == null)
 			{
@@ -413,6 +445,53 @@ namespace Valheim_Serverside.Features
 			return (ea.list == null || ea.list.Contains(eb.creator)) && (eb.list == null || eb.list.Contains(ea.creator));
 		}
 
+		// Protect: the list of the ward that holds the portal; where none does, the list of the ward that holds the other end of its pair.
+		// Null where no ward holds either end. holder: the end whose ward it is.
+		private static HashSet<long> Protectors(ZDO portal, out ZDO holder)
+		{
+			holder = portal;
+			HashSet<long> list = Describe(portal).list;
+			if (list != null)
+			{
+				return list;
+			}
+			ZDO partner = Partner(portal);
+			if (partner == null)
+			{
+				return null;
+			}
+			holder = partner;
+			return Describe(partner).list;
+		}
+
+		// A hit by a creature that the sender's game runs (a raid, a monster): the game's own, not the player's.
+		private static bool CreatureHit(ZNetPeer peer, HitData hit)
+		{
+			if (hit.m_attacker.IsNone())
+			{
+				return false;
+			}
+			ZDO attacker = ZDOMan.instance.GetZDO(hit.m_attacker);
+			return attacker != null && s_creatures.Contains(attacker.GetPrefab()) && attacker.GetOwner() == peer.m_uid;
+		}
+
+		// Protect: may this player's hit (hit) or hammer (hit null) go to the portal? False: refused, logged, and the player told.
+		private static bool MayTakeDown(ZDO portal, ZNetPeer peer, HitData hit)
+		{
+			if ((hit != null && CreatureHit(peer, hit)) || IsAdmin(peer))
+			{
+				return true;
+			}
+			HashSet<long> list = Protectors(portal, out ZDO holder);
+			long who = PlayerId(peer);
+			if (list == null || (who != 0L && list.Contains(who)))
+			{
+				return true;
+			}
+			RefuseTakeDown(peer, portal, holder, hit != null ? "hit" : "take down");
+			return false;
+		}
+
 		/*
 			ZDOMan.SendZDOs sets who the next ZDO.Serialize calls are for. A portal a player may not use is
 			serialized with its connection set to none, and put back in the finalizer.
@@ -564,14 +643,19 @@ namespace Valheim_Serverside.Features
 			}
 		}
 
-		// Changing a portal's name when a player's game owns the portal: not passed on to that game, unless the sender may manage it.
+		/*
+			Changing a portal's name when a player's game owns the portal: not passed on to that game, unless the sender may manage it.
+			Protect: nor a hit or a hammer's removal from someone who may not take the portal down.
+		*/
 		[HarmonyPatch(typeof(ZRoutedRpc), "RouteRPC")]
 		public static class ZRoutedRpc_RouteRPC_Patch
 		{
 			static bool Prefix(ZRoutedRpc.RoutedRPCData rpcData)
 			{
-				if (rpcData.m_methodHash != s_setTag || rpcData.m_targetZDO.IsNone() || ZDOMan.instance == null || !ZNet.instance
-					|| !ZNet.instance.IsServer() || !Configuration.portalLockEnabled.Value)
+				int method = rpcData.m_methodHash;
+				if ((method != s_setTag && method != s_damage && method != s_remove) || rpcData.m_targetZDO.IsNone() || ZDOMan.instance == null
+					|| !ZNet.instance || !ZNet.instance.IsServer() || !Configuration.portalLockEnabled.Value
+					|| (method != s_setTag && !Configuration.portalLockProtect.Value))
 				{
 					return true;
 				}
@@ -582,6 +666,17 @@ namespace Valheim_Serverside.Features
 					if (!Ready() || !IsPortal(zdo) || peer == null)
 					{
 						return true;
+					}
+					if (method != s_setTag)
+					{
+						HitData hit = null;
+						if (method == s_damage)
+						{
+							ZPackage parameters = new ZPackage(rpcData.m_parameters.GetArray());
+							hit = new HitData();
+							hit.Deserialize(ref parameters);
+						}
+						return MayTakeDown(zdo, peer, hit);
 					}
 					if (!MayManage(zdo, peer))
 					{
@@ -595,6 +690,50 @@ namespace Valheim_Serverside.Features
 					Fault(e);
 					return true;
 				}
+			}
+		}
+
+		// Protect, where the server owns the portal: a player's hit or hammer is handled here, not routed. The server's own hits are not judged.
+		[HarmonyPatch(typeof(WearNTear), "RPC_Damage")]
+		public static class WearNTear_RPC_Damage_Patch
+		{
+			static bool Prefix(WearNTear __instance, long sender, HitData hit)
+			{
+				return ServerOwnedTakeDown(__instance, sender, hit ?? new HitData());
+			}
+		}
+
+		[HarmonyPatch(typeof(WearNTear), "RPC_Remove")]
+		public static class WearNTear_RPC_Remove_Patch
+		{
+			static bool Prefix(WearNTear __instance, long sender)
+			{
+				return ServerOwnedTakeDown(__instance, sender, null);
+			}
+		}
+
+		private static bool ServerOwnedTakeDown(WearNTear piece, long sender, HitData hit)
+		{
+			if (!Configuration.portalLockEnabled.Value || !Configuration.portalLockProtect.Value || !ZNet.instance || !ZNet.instance.IsServer()
+				|| ZDOMan.instance == null || sender == ZDOMan.GetSessionID())
+			{
+				return true;
+			}
+			try
+			{
+				ZNetView view = piece.m_nview;
+				ZDO zdo = view && view.IsValid() && view.IsOwner() ? view.GetZDO() : null;
+				ZNetPeer peer = zdo != null ? ZNet.instance.GetPeer(sender) : null;
+				if (peer == null || !Ready() || !IsPortal(zdo))
+				{
+					return true;
+				}
+				return MayTakeDown(zdo, peer, hit);
+			}
+			catch (Exception e)
+			{
+				Fault(e);
+				return true;
 			}
 		}
 
@@ -699,6 +838,14 @@ namespace Valheim_Serverside.Features
 			foreach (string key in s_told.Keys.Where(k => !peers.ContainsKey(long.Parse(k.Substring(0, k.IndexOf('/'))))).ToList())
 			{
 				s_told.Remove(key);
+			}
+			foreach (string key in s_refusals.Keys.Where(k => !peers.ContainsKey(long.Parse(k.Substring(0, k.IndexOf('/'))))).ToList())
+			{
+				if (s_refusals[key].count > 0)
+				{
+					WriteRefusals(s_refusals[key]);
+				}
+				s_refusals.Remove(key);
 			}
 			s_logged.RemoveWhere(k => !k.StartsWith("pair/") && !peers.ContainsKey(long.Parse(k.Split('/')[1])));
 			long server = ZDOMan.GetSessionID();
@@ -840,6 +987,65 @@ namespace Valheim_Serverside.Features
 				ServersidePlugin.logger.LogInfo($"Portal lock: {peer.m_playerName} may not {what} of the portal at {Where(portal)}; not passed on");
 			}
 			Say(peer, portal, "private", Configuration.portalLockMessage.Value);
+		}
+
+		private class Refusals
+		{
+			public string line;
+			public float last = float.MinValue;
+			public int count;
+		}
+
+		/*
+			Protect: a refused hit or removal. The log and <world>.guard.log get a line at most once a minute per player, portal and kind,
+			with how many there were since the last one (the rest when the player leaves); the player is told as at a private portal.
+		*/
+		private static void RefuseTakeDown(ZNetPeer peer, ZDO portal, ZDO holder, string what)
+		{
+			string key = $"{peer.m_uid}/{portal.m_uid}/{what}";
+			if (!s_refusals.TryGetValue(key, out Refusals r))
+			{
+				string by = holder == portal ? "the ward over it" : $"the ward over its other end at {Where(holder)}";
+				s_refusals[key] = r = new Refusals { line = $"{Clean(peer.m_playerName)} ({PlayerId(peer)}) tried to {what} {NameOf(portal)} at {Where(portal)}, which {by} protects" };
+			}
+			r.count++;
+			if (Time.time - r.last >= 60f)
+			{
+				WriteRefusals(r);
+			}
+			Say(peer, portal, "protected", Configuration.portalLockProtectMessage.Value);
+		}
+
+		private static void WriteRefusals(Refusals r)
+		{
+			string line = $"{r.line} [{r.count}x since the last line] -- refused";
+			r.count = 0;
+			r.last = Time.time;
+			ServersidePlugin.logger.LogInfo("Portal lock: " + line);
+			GuardLog.Write("portal lock: " + line);
+		}
+
+		// A player's name goes into a log line: no line breaks or other control characters, or a name could forge a line.
+		private static string Clean(string name)
+		{
+			if (string.IsNullOrEmpty(name))
+			{
+				return "?";
+			}
+			char[] c = name.ToCharArray();
+			for (int i = 0; i < c.Length; i++)
+			{
+				if (char.IsControl(c[i]))
+				{
+					c[i] = ' ';
+				}
+			}
+			return new string(c);
+		}
+
+		private static string NameOf(ZDO zdo)
+		{
+			return ZNetScene.instance.GetPrefab(zdo.GetPrefab())?.name ?? "#" + zdo.GetPrefab();
 		}
 
 		private static string Where(ZDO zdo)
