@@ -1,3 +1,29 @@
+## [1.27.1] - 2026-11-01
+
+### Changed
+
+- The ward guard, the portal lock, the guardian stones and the decay no longer look through every object of the world to
+  find what they need. Each did that in a single frame: the ward guard every 5 s, the portal lock every 10 s, the guardian
+  stones every minute (35-45 ms each time on the live world, 891,000 objects), and the decay at every pass. A world index
+  now finds the wards, the portals, the guardian stones and everything that can have a builder once, after the world has
+  loaded, and keeps them up to date as the game makes and takes away objects. Every 10 minutes it is checked against the
+  whole world, at most 20,000 objects a frame, and whatever it had wrong is put right and written to the log. The log line
+  "Ward guard: N ward(s) among ... objects, found in ... ms" is replaced by "World index: ...".
+- A ward, portal or guardian stone that is built counts at once, not at the next look: a stranger no longer sees a new
+  portal's connection for up to 10 s after the ward over it was built.
+- Decay: a pass reads only the objects that can have a builder (on the live world 86,000 of 891,000), and finds the wards
+  and workbenches over a piece in a grid instead of trying each of them for every piece. The first pass after a start still
+  reads every object, to check that nothing but pieces has a builder; should anything else have one (set by another mod),
+  every pass reads every object again, as before, and the log says so. What it decides is the same: on a copy of the live
+  world, five passes 0 to 24 days on gave the same report, line for line.
+
+Measured on a copy of the live world with the live configuration, on the test machine (where the old looks took 14-18 ms),
+over 640 s: what the plugin does in its frame updates came to 0.98 s instead of 4.42 s, and frames longer than 20 ms fell
+from 39 to 9 (longer than 50 ms, from 8 to 3). The ward guard's 14 ms every 5 s are gone; the portal lock takes 0.35 ms
+instead of 18 ms every 10 s, the guardian stones at most 0.02 ms instead of 16 ms every minute, a decay pass 18 ms instead
+of 80-97 ms (75 ms for the first one after a start). The world index costs 33 ms once, after the world has loaded, and its
+check every 10 minutes some 30 ms, spread over 50 frames of at most about 1 ms.
+
 ## [1.27.0] - 2026-11-01
 
 ### Added

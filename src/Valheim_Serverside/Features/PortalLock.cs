@@ -83,8 +83,7 @@ namespace Valheim_Serverside.Features
 		// Prefab hash -> true for the portals; prefab hash -> radius for the wards players own.
 		private static HashSet<int> s_portalPrefabs;
 		private static Dictionary<int, float> s_wardRadius;
-		private static List<ZDOID> s_portalIds;
-		private static List<ZDOID> s_wardIds;
+		private static bool s_scanned;
 		private static float s_nextScan;
 		private static float s_nextTick;
 		private static int s_errors;
@@ -152,36 +151,23 @@ namespace Valheim_Serverside.Features
 						? $"; and who may hit one or take it down, the far end of a pair included (Protect; {creatures.Count} kinds of creature whose hits are the game's)"
 						: "; who may hit one or take it down is left to the game (Protect off)"));
 			}
-			if (s_portalPrefabs == null || s_portalPrefabs.Count == 0 || ZDOMan.instance == null)
+			if (s_portalPrefabs == null || s_portalPrefabs.Count == 0 || ZDOMan.instance == null || !WorldIndex.Ready())
 			{
 				return false;
 			}
-			if (s_wardIds == null)
+			if (!s_scanned)
 			{
 				Scan();
 			}
 			return true;
 		}
 
+		// The portals and the wards come from the world index (kept up to date as they are made and taken away), no longer from a
+		// look through the whole world every 10 s (35-45 ms on the live world); the places to keep clear are looked up every 10 s.
 		private static void Scan()
 		{
 			s_nextScan = Time.time + 10f;
-			List<ZDOID> portals = new List<ZDOID>();
-			List<ZDOID> wards = new List<ZDOID>();
-			foreach (ZDO zdo in ZDOMan.instance.m_objectsByID.Values)
-			{
-				int prefab = zdo.GetPrefab();
-				if (s_portalPrefabs.Contains(prefab))
-				{
-					portals.Add(zdo.m_uid);
-				}
-				else if (s_wardRadius.ContainsKey(prefab))
-				{
-					wards.Add(zdo.m_uid);
-				}
-			}
-			s_portalIds = portals;
-			s_wardIds = wards;
+			s_scanned = true;
 			ScanKeepClear();
 		}
 
@@ -313,7 +299,7 @@ namespace Valheim_Serverside.Features
 			float extra = Mathf.Max(0f, Configuration.portalLockExtraReach.Value);
 			Vector3 at = portal.GetPosition();
 			bool builtByWardOwners = true;
-			foreach (ZDOID id in s_wardIds)
+			foreach (ZDOID id in WorldIndex.Wards)
 			{
 				ZDO ward = ZDOMan.instance.GetZDO(id);
 				if (ward == null || !s_wardRadius.TryGetValue(ward.GetPrefab(), out float radius))
@@ -880,7 +866,7 @@ namespace Valheim_Serverside.Features
 			}
 
 			// A portal a player's game owns and that player may not manage goes back to the server.
-			foreach (ZDOID id in s_portalIds)
+			foreach (ZDOID id in WorldIndex.Portals)
 			{
 				ZDO zdo = ZDOMan.instance.GetZDO(id);
 				if (zdo == null || !zdo.HasOwner() || zdo.GetOwner() == server)

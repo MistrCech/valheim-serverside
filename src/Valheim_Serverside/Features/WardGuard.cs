@@ -89,8 +89,6 @@ namespace Valheim_Serverside.Features
 		// A request for a chest, and what the chest answers when it says no.
 		private static readonly Dictionary<int, string> s_answer = new Dictionary<int, string>();
 		private static readonly Dictionary<int, string> s_names = new Dictionary<int, string>();
-		private static List<ZDOID> s_wardIds;
-		private static float s_nextScan;
 		private static int s_errors;
 		private static readonly List<int> s_permittedKeys = new List<int>();
 		private static readonly Dictionary<string, float> s_rate = new Dictionary<string, float>();
@@ -137,11 +135,9 @@ namespace Valheim_Serverside.Features
 			{
 				return false;
 			}
-			if (s_wardIds == null || Time.time >= s_nextScan)
-			{
-				Scan();
-			}
-			return true;
+			// The wards come from the world index (kept up to date as wards are made and taken away), no longer from a look through
+			// the whole world every 5 s (35-45 ms on the live world).
+			return WorldIndex.Ready();
 		}
 
 		// What the game's own client checks, and the pieces that have none, as the prefabs say.
@@ -211,28 +207,6 @@ namespace Valheim_Serverside.Features
 				+ $"{s_gate.Count} kinds of request on {s_gate.Values.SelectMany(s => s).Distinct().Count()} prefab(s) ({guarded} component(s)) are held to the ward's list.");
 		}
 
-		private static void Scan()
-		{
-			s_nextScan = Time.time + 5f;
-			System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
-			List<ZDOID> wards = new List<ZDOID>();
-			foreach (ZDO zdo in ZDOMan.instance.m_objectsByID.Values)
-			{
-				if (s_wardRadius.ContainsKey(zdo.GetPrefab()))
-				{
-					wards.Add(zdo.m_uid);
-				}
-			}
-			s_wardIds = wards;
-			if (!s_scanLogged || (watch.ElapsedMilliseconds > 40 && Rate("slowscan", 600f)))
-			{
-				s_scanLogged = true;
-				ServersidePlugin.logger.LogInfo($"Ward guard: {wards.Count} ward(s) among {ZDOMan.instance.m_objectsByID.Count} objects, found in {watch.Elapsed.TotalMilliseconds:0.0} ms (looked for every 5 s)");
-			}
-		}
-
-		private static bool s_scanLogged;
-
 		private static long PlayerId(ZNetPeer peer)
 		{
 			if (peer == null || peer.m_characterID.IsNone())
@@ -284,7 +258,7 @@ namespace Valheim_Serverside.Features
 		private static bool Allowed(Vector3 at, long player, out ZDO denying)
 		{
 			denying = null;
-			foreach (ZDOID id in s_wardIds)
+			foreach (ZDOID id in WorldIndex.Wards)
 			{
 				ZDO ward = ZDOMan.instance.GetZDO(id);
 				if (ward == null || !s_wardRadius.TryGetValue(ward.GetPrefab(), out float radius) || !ward.GetBool(ZDOVars.s_enabled))
@@ -532,7 +506,7 @@ namespace Valheim_Serverside.Features
 				s_switchedOn.Remove(id);
 			}
 			HashSet<ZDOID> on = new HashSet<ZDOID>();
-			foreach (ZDOID id in s_wardIds)
+			foreach (ZDOID id in WorldIndex.Wards)
 			{
 				ZDO other = ZDOMan.instance.GetZDO(id);
 				if (other != null && id != ward.m_uid && other.GetLong(ZDOVars.s_creator, 0L) == player && other.GetBool(ZDOVars.s_enabled))
@@ -607,7 +581,7 @@ namespace Valheim_Serverside.Features
 		{
 			int limit = Configuration.wardGuardMaxActiveWards.Value;
 			Dictionary<long, List<ZDO>> on = new Dictionary<long, List<ZDO>>();
-			foreach (ZDOID id in s_wardIds)
+			foreach (ZDOID id in WorldIndex.Wards)
 			{
 				ZDO ward = ZDOMan.instance.GetZDO(id);
 				if (ward == null || !ward.GetBool(ZDOVars.s_enabled))

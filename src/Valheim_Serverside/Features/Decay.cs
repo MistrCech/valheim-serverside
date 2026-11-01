@@ -128,7 +128,72 @@ namespace Valheim_Serverside.Features
 			// For the builder's own pieces (an exempt builder is always active), and for everybody else's (what the keepers really did).
 			public DateTime activity, realActivity;
 			public string name;
+			// KeyOf(tier, creator, at), made once a pass rather than for every piece it covers.
+			public string key;
 		}
+
+		/*
+			The wards and workbenches by where they stand, so that a piece looks only at those that can cover it: the ones in its cell
+			of a grid a metre wider than the widest claim, and in the eight cells around it. Before, each piece looked at all of them: every
+			piece of the world times every ward and workbench. They are gone through in the order of the list, as before, so where two
+			claims are equally good the same one wins.
+		*/
+		private sealed class ProtectorGrid
+		{
+			private readonly Dictionary<long, List<int>> m_cells = new Dictionary<long, List<int>>();
+			private readonly List<int> m_near = new List<int>();
+			private readonly float m_size = 1f;
+
+			public ProtectorGrid(List<Protector> protectors)
+			{
+				foreach (Protector p in protectors)
+				{
+					m_size = Math.Max(m_size, p.radius);
+				}
+				// a metre wider than the widest claim: a piece just inside a claim's edge is never two cells away by a rounding
+				m_size += 1f;
+				for (int i = 0; i < protectors.Count; i++)
+				{
+					Vector3 at = protectors[i].at;
+					long cell = Key((long)Math.Floor(at.x / m_size), (long)Math.Floor(at.z / m_size));
+					if (!m_cells.TryGetValue(cell, out List<int> list))
+					{
+						m_cells[cell] = list = new List<int>();
+					}
+					list.Add(i);
+				}
+			}
+
+			private static long Key(long cx, long cz)
+			{
+				return cx * 1000003L + cz;
+			}
+
+			// The ones that may cover this place, by their place in the list. The same list is handed out again by the next call.
+			public List<int> Near(Vector3 at)
+			{
+				m_near.Clear();
+				long cx = (long)Math.Floor(at.x / m_size), cz = (long)Math.Floor(at.z / m_size);
+				for (long dx = -1; dx <= 1; dx++)
+				{
+					for (long dz = -1; dz <= 1; dz++)
+					{
+						if (m_cells.TryGetValue(Key(cx + dx, cz + dz), out List<int> list))
+						{
+							m_near.AddRange(list);
+						}
+					}
+				}
+				m_near.Sort();
+				return m_near;
+			}
+		}
+
+		// A builder's own claim on a piece (no ward or workbench over it): the same for each of their pieces, made once a pass.
+		private static readonly Dictionary<long, Candidate> s_alone = new Dictionary<long, Candidate>();
+		// The prefabs the game knows that have no Piece, so nobody built (set in Ready), and whether a pass has seen that holds.
+		private static HashSet<int> s_notPieces;
+		private static bool s_notPiecesChecked;
 
 		// One claim on a piece, and when it lapses (start) and the piece is gone (end).
 		private struct Candidate
@@ -277,6 +342,7 @@ namespace Valheim_Serverside.Features
 			{
 				Dictionary<int, float> wards = new Dictionary<int, float>();
 				HashSet<int> bench = new HashSet<int>(), holders = new HashSet<int>(), portals = new HashSet<int>(), ships = new HashSet<int>(), containers = new HashSet<int>();
+				HashSet<int> notPieces = new HashSet<int>();
 				foreach (GameObject prefab in ZNetScene.instance.m_prefabs)
 				{
 					if (!prefab || !prefab.GetComponent<ZNetView>())
@@ -284,6 +350,10 @@ namespace Valheim_Serverside.Features
 						continue;
 					}
 					int hash = prefab.name.GetStableHashCode();
+					if (!prefab.GetComponentInChildren<global::Piece>(true))
+					{
+						notPieces.Add(hash);
+					}
 					PrivateArea area = prefab.GetComponent<PrivateArea>();
 					if (area && area.m_ownerFaction == Character.Faction.Players)
 					{
@@ -315,6 +385,7 @@ namespace Valheim_Serverside.Features
 				s_portals = portals;
 				s_ships = ships;
 				s_containers = containers;
+				s_notPieces = notPieces;
 				s_wardRadius = wards;
 			}
 			return s_wardRadius != null && ZDOMan.instance != null && ZNet.World != null;
@@ -549,16 +620,49 @@ namespace Valheim_Serverside.Features
 			}
 
 			// 1. wards, workbenches, pieces
+			// Only a piece has a builder (the game sets s_creator in Piece.SetCreator alone), so an object of a prefab the game knows
+			// without a Piece is passed over before its data is read (most of the world: trees, rocks, plants, creatures). The first
+			// pass after a start reads them all the same, and should one of them have a builder, every object is read from then on.
+			// Once that has been checked, only the objects the world index has as able to have a builder are looked at (the pieces
+			// and what the game does not know), not all 891 000 objects of the live world (45 ms a pass on the test machine).
 			List<Protector> protectors = new List<Protector>();
 			List<Piece> pieces = new List<Piece>();
-			foreach (ZDO zdo in ZDOMan.instance.m_objectsByID.Values)
+			HashSet<int> skip = s_notPieces;
+			Dictionary<int, int> builtButSkipped = s_notPiecesChecked ? null : new Dictionary<int, int>();
+			IEnumerable<ZDO> objects = ZDOMan.instance.m_objectsByID.Values;
+			if (skip != null && builtButSkipped == null && WorldIndex.Ready())
 			{
+				List<ZDOID> built = WorldIndex.Built;
+				List<ZDO> found = new List<ZDO>(built.Count);
+				foreach (ZDOID id in built)
+				{
+					ZDO zdo = ZDOMan.instance.GetZDO(id);
+					if (zdo != null)
+					{
+						found.Add(zdo);
+					}
+				}
+				objects = found;
+			}
+			foreach (ZDO zdo in objects)
+			{
+				int prefab = zdo.GetPrefab();
+				if (skip != null && skip.Contains(prefab))
+				{
+					if (builtButSkipped != null && zdo.GetLong(ZDOVars.s_creator, 0L) != 0L)
+					{
+						builtButSkipped[prefab] = (builtButSkipped.TryGetValue(prefab, out int seen) ? seen : 0) + 1;
+					}
+					else
+					{
+						continue;
+					}
+				}
 				long creator = zdo.GetLong(ZDOVars.s_creator, 0L);
 				if (creator == 0L)
 				{
 					continue;
 				}
-				int prefab = zdo.GetPrefab();
 				Vector3 at = zdo.GetPosition();
 				pieces.Add(new Piece
 				{
@@ -588,7 +692,7 @@ namespace Valheim_Serverside.Features
 					}
 					protectors.Add(new Protector
 					{
-						id = zdo.m_uid, at = at, radius = radius, tier = Tier.Ward, creator = creator, keepers = keepers, name = Name(creator),
+						id = zdo.m_uid, at = at, radius = radius, tier = Tier.Ward, creator = creator, keepers = keepers, name = Name(creator), key = KeyOf(Tier.Ward, creator, at),
 						activity = keepers.Select(k => KeeperActivity(creator, k)).Max(), realActivity = keepers.Select(RealActivity).Max(),
 					});
 				}
@@ -598,7 +702,19 @@ namespace Valheim_Serverside.Features
 					{
 						id = zdo.m_uid, at = at, radius = Math.Max(1f, Configuration.decayWorkbenchRadius.Value), tier = Tier.Bench, creator = creator,
 						keepers = new HashSet<long> { creator }, name = Name(creator), activity = Activity(creator), realActivity = RealActivity(creator),
+						key = KeyOf(Tier.Bench, creator, at),
 					});
+				}
+			}
+			if (builtButSkipped != null)
+			{
+				s_notPiecesChecked = true;
+				if (builtButSkipped.Count > 0)
+				{
+					s_notPieces = null;
+					ServersidePlugin.logger.LogWarning("Decay: objects of prefabs with no Piece have a builder ("
+						+ string.Join(", ", builtButSkipped.OrderBy(kv => kv.Key).Select(kv => (ZNetScene.instance.GetPrefab(kv.Key)?.name ?? Inv(kv.Key)) + " x" + kv.Value))
+						+ "), something other than the game sets one: every object is read in each pass from now on");
 				}
 			}
 			s_pieceById.Clear();
@@ -606,6 +722,8 @@ namespace Valheim_Serverside.Features
 			{
 				s_pieceById[piece.id] = piece;
 			}
+			ProtectorGrid grid = new ProtectorGrid(protectors);
+			s_alone.Clear();
 			LearnAdmins();
 
 			List<string> did = new List<string>();
@@ -642,7 +760,7 @@ namespace Valheim_Serverside.Features
 					unmarked.Add(piece);
 					continue;
 				}
-				if (Best(piece, protectors).start > now)
+				if (Best(piece, protectors, grid).start > now)
 				{
 					// Someone who holds this piece is active (its builder, say, in the ward of players who are gone): it stays.
 					if (write)
@@ -676,7 +794,7 @@ namespace Valheim_Serverside.Features
 			Dictionary<long, List<Vector3>> shelter = new Dictionary<long, List<Vector3>>();
 			foreach (Piece piece in unmarked)
 			{
-				Candidate best = Best(piece, protectors);
+				Candidate best = Best(piece, protectors, grid);
 				bestOf[piece.id] = best;
 				if (best.start > now)
 				{
@@ -1012,12 +1130,12 @@ namespace Valheim_Serverside.Features
 			the piece belongs to that claim's base. The claims: the wards that are on and the workbenches that cover it, and its builder alone.
 			A portal and the portal it is connected to are one thing: the pair lives while either end is held.
 		*/
-		private static Candidate Best(Piece piece, List<Protector> protectors)
+		private static Candidate Best(Piece piece, List<Protector> protectors, ProtectorGrid grid)
 		{
-			Candidate own = BestOne(piece, protectors);
+			Candidate own = BestOne(piece, protectors, grid);
 			if (!piece.partner.IsNone() && s_pieceById.TryGetValue(piece.partner, out Piece other))
 			{
-				Candidate theirs = BestOne(other, protectors);
+				Candidate theirs = BestOne(other, protectors, grid);
 				if (Better(theirs, own))
 				{
 					return theirs;
@@ -1026,12 +1144,13 @@ namespace Valheim_Serverside.Features
 			return own;
 		}
 
-		private static Candidate BestOne(Piece piece, List<Protector> protectors)
+		private static Candidate BestOne(Piece piece, List<Protector> protectors, ProtectorGrid grid)
 		{
 			Candidate best = default(Candidate);
 			bool any = false;
-			foreach (Protector p in protectors)
+			foreach (int index in grid.Near(piece.at))
 			{
+				Protector p = protectors[index];
 				if (!Covers(piece.at, p.at, p.radius))
 				{
 					continue;
@@ -1041,7 +1160,7 @@ namespace Valheim_Serverside.Features
 				DateTime start = activity.AddDays(DaysOf(TierGrace(p.tier)));
 				Candidate c = new Candidate
 				{
-					key = KeyOf(p.tier, p.creator, p.at),
+					key = p.key,
 					tier = p.tier,
 					creator = p.creator,
 					keepers = p.keepers,
@@ -1057,20 +1176,23 @@ namespace Valheim_Serverside.Features
 					any = true;
 				}
 			}
-			DateTime own = Activity(piece.creator);
-			DateTime ownStart = own.AddDays(DaysOf(TierGrace(Tier.None)));
-			Candidate alone = new Candidate
+			if (!s_alone.TryGetValue(piece.creator, out Candidate alone))
 			{
-				key = "N:" + Inv(piece.creator),
-				tier = Tier.None,
-				creator = piece.creator,
-				keepers = new HashSet<long> { piece.creator },
-				activity = own,
-				start = ownStart,
-				end = ownStart.AddDays(DaysOf(TierFade(Tier.None))),
-				ward = ZDOID.None,
-				owner = Name(piece.creator),
-			};
+				DateTime own = Activity(piece.creator);
+				DateTime ownStart = own.AddDays(DaysOf(TierGrace(Tier.None)));
+				s_alone[piece.creator] = alone = new Candidate
+				{
+					key = "N:" + Inv(piece.creator),
+					tier = Tier.None,
+					creator = piece.creator,
+					keepers = new HashSet<long> { piece.creator },
+					activity = own,
+					start = ownStart,
+					end = ownStart.AddDays(DaysOf(TierFade(Tier.None))),
+					ward = ZDOID.None,
+					owner = Name(piece.creator),
+				};
+			}
 			return !any || Better(alone, best) ? alone : best;
 		}
 

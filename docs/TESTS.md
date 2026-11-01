@@ -53,6 +53,40 @@ All 22 checks passed. In order:
 13. Anti-cheat logged fake0's jump (1 new Teleport finding). It logged none of fake1's moves, each made after the
     console sent fake1 there; two of them were jumps of over 2000 m (2266 m and 2063 m).
 
+## World index
+
+1.27.1 was tested on a copy of the live world taken the same day (891,000 objects, game 1.0.20), on the test machine.
+
+The index itself was tested with one simulated player. All 17 checks passed:
+
+1. A ward, a portal and a workbench made by the server are in the index at once, each under its kinds. So is a ward
+   that a player's game sends (`RPC_ZDOData`). The workbench is neither a ward nor a portal, and the guardian stones
+   are as many as before.
+2. The workbench, taken away, is out of the index at once.
+3. The index was then spoilt the way a mod going past the game's hooks would spoil it: a ward taken out, the id of no
+   object put in as a portal and as built, a tree put in as a portal. The 10-minute check, started at once, put back
+   exactly what was taken out (1 ward, 1 built) and took out exactly what was put in (2 portals, 1 built). A workbench
+   made while it compared stayed in. A second check found the index right. Neither check ran 4 ms or more on a CPU in
+   any frame.
+4. With the hooks gone, an index 10 s old is made again from the world.
+
+The check went through 891,160 objects in 50 frames, 26 ms in all, and no frame of it ran more than 1.1 ms on a CPU.
+That was measured from outside the plugin with the server thread's own CPU time, because the clock time of a frame also
+holds the time the thread waited for a CPU while the machine did other work (up to 0.8 ms in a frame here). In an earlier
+build the check still grew its sets and copied the list of built objects while it ran: its first check had a frame of
+2.4 ms on a CPU, and one run had two frames of 6.9 and 6.4 ms of clock time, which four later runs did not repeat. Making
+the index takes 33 ms, once, after the world has loaded.
+
+The other features were run on the same copy against 1.27.0:
+
+- Decay with the live configuration, five passes 0 to 24 days on: the same report, line for line (532 lines). The
+  decay test: 110 of 110, on the copy and on the copy 15 days on.
+- Console 22 of 22, ward limit 17 of 17 (on) and 13 of 13 (off), anti-cheat 41 of 41, with the same log as 1.27.0
+  apart from timing and the order of kicks.
+- Ward guard on and off, guardian stones, 20 portals: the same log as 1.27.0.
+- Portal lock on and off: the same log, except for 6 fewer resends of a portal's connection in the seconds after a ward
+  was built over it. The old look, up to 10 s late, let those through.
+
 ## Anti-cheat
 
 Tested on a copy of the live world with 30 simulated players sending each object through the server's own entry point for object data, as a client does: a fair builder (floor, three crops 0.5 s apart, a pair 0.02 s apart, wood in stacks of 20 and 50, a floor in their own ward), an admin who does all of it, and one cheater of each kind (thistle, five crops in one moment, floors 80 and 90 m away, another player's creator, 500 wood and wood of quality 9, an object the game does not have, a character that flies, floors in a stranger's ward and one outside it, a boar with the cheating mark, field overrides, floors in the start temple, floors in a dungeon, a floor made under another game's session, a game that names another's character, a game with no character, a flood of 4,100 objects, a boar of level 50 (and one of level 3, which stays), a game that writes to another's character and to another's new piece), a guest on a ward's list, a game that is warned once and not kicked, the rules that only log (they logged and let it through; an item whose data carries the cheating mark is traced), the teleport (a jump with and without a portal at the departure) and the run, and the scan and revert of the stored world -- plus the real planting times of the three players above -- and a real Valheim client joining, walking and jumping against the same server (its character object carries the stamina: a jump takes 12 of it at once and the regeneration starts a second later) (46 to 65 objects of its game judged in three runs, nothing found by any rule): every object that broke a rule was taken away and the player kicked after six seconds, nothing else was touched, nobody who played fair was kicked. `PaidPlanting` was tested the same way with 29 simulated players planting groups of crops (paid up front or in the frame of the press, partly paid, a quarter paid, only the first plant paid, a hammer in the hand, no stamina in the character, the stamina a moment late and too late, a hole in the planting times, two groups sent alternately or 0.45, 0.8 and 1.3 s apart, a game written to by another, an admin, planting times at the edge of a long, a character that ran out of stamina with a grid of nine, the world taking no stamina, the setting switched off): 29 of 29 checks. What was not tested: a real client placing pieces and planting (only the simulated ones) and the mods themselves.

@@ -387,23 +387,15 @@ namespace Valheim_Serverside.Features
 			}
 		}
 
-		// A stone a player's game took over (to hang or turn a trophy) is the server's again after 10 s.
-		private static readonly List<ZDOID> s_stoneIDs = new List<ZDOID>();
-		private static float s_nextStoneScan;
-
+		// A stone a player's game took over (to hang or turn a trophy) is the server's again after 10 s. The stones come from the
+		// world index (kept up to date as objects are made and taken away), no longer from a look through the whole world every 60 s.
 		private static void Reclaim()
 		{
-			if (Time.time >= s_nextStoneScan)
-			{
-				s_nextStoneScan = Time.time + 60f;
-				s_stoneIDs.Clear();
-				s_stoneIDs.AddRange(ZDOMan.instance.m_objectsByID.Values.Where(zdo => s_stones.ContainsKey(zdo.GetPrefab())).Select(zdo => zdo.m_uid));
-			}
 			long server = ZDOMan.GetSessionID();
-			foreach (ZDOID id in s_stoneIDs)
+			foreach (ZDOID id in WorldIndex.BossStones)
 			{
 				ZDO zdo = ZDOMan.instance.GetZDO(id);
-				if (zdo == null || !zdo.HasOwner() || zdo.GetOwner() == server)
+				if (zdo == null || !s_stones.ContainsKey(zdo.GetPrefab()) || !zdo.HasOwner() || zdo.GetOwner() == server)
 				{
 					s_clientOwnedSince.Remove(id);
 					continue;
