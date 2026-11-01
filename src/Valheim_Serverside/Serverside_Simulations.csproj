@@ -124,6 +124,8 @@
     <Compile Include="Features\DvergrTrade.cs" />
     <Compile Include="Features\Decay.cs" />
     <Compile Include="Features\AntiCheat.cs" />
+    <Compile Include="Features\RpcCensus.cs" />
+    <Compile Include="Features\RpcNames.cs" />
     <Compile Include="Features\Progress.cs" />
     <Compile Include="Features\NightSpawnGuard.cs" />
     <Compile Include="Features\Core.cs" />

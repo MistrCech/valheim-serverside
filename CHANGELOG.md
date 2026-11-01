@@ -1,3 +1,14 @@
+## [1.28.0] - 2026-11-01
+
+### Added
+
+- RPC census (`[RpcCensus] Enabled`, off by default): every RPC a player's game sends that the game itself does not have --
+  the mark a mod on their client leaves on the wire -- is noted: the first time in a run with a line in the log, at the
+  end of a visit with a summary of it, and all of it in `<world>.rpcs.txt` next to the world (player, call, to whom, on
+  what object, how many times, bytes, first and last seen, a few readable words out of it). Calls are named from a table
+  of the game's own 183 and 468 of mods, read out of the code of the 300 most downloaded mods on Thunderstore; one without
+  a name is written as its hash. Nothing is blocked or changed. Needs a restart.
+
 ## [1.27.1] - 2026-11-01
 
 ### Changed

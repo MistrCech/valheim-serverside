@@ -94,3 +94,33 @@ Tested on a copy of the live world with 30 simulated players sending each object
 ## Anti-cheat: where the numbers come from
 
 The plants of three real players on the server this was written for, replayed through the rule: 181 and 131 plants put down by hand (pairs of plants 0.02 to 0.16 s apart are in the real data -- the time written into a plant is the game's network time, which now and then steps by a few tenths of a second -- but never three in a quarter of a second) and 110 plants put down in groups by a mod (98 of 109 gaps under 0.05 s, up to 36 plants within a quarter of a second). `MinInterval` and `RatePlants` are set from that: the two players who plant by hand (312 plants) were not caught, the mod user was, plant by plant. Two hands are a small sample; a mod that shortens the pause between presses (ToolTweaks) can put honest plants closer than that.
+
+## RPC census
+
+1.28.0, tested on a copy of the live world taken the same evening (game 1.0.20, the census on, the rest of the
+configuration at its defaults) with two simulated players. Player 0 sent, the way a client's game does: the game's own
+`RPC_DamageText` to player 1; a call a server plugin had registered (the test kit's); `VPlusMapSync` (Valheim Plus) to
+everybody; an unknown call five times to the server; an unknown call on a workbench; the game's `RPC_Damage` on an object
+that was gone; and on the connection itself an unknown call, the ping and `ServerSyncedPlayerData` (the reference
+position). Then player 0 left, player 1 sent the unknown call twice and left, and the file was read back and written again.
+All 14 checks passed:
+- Noted were exactly the four unknown ones, each once with its count, kind, object and words (`VPlusMapSync` by name and
+  mod, the others by hash); nothing of the game's own, nothing the plugin had registered, nothing from player 1 before it
+  sent anything.
+- What had somewhere to go got there: the plugin's handler its words, player 1 the `VPlusMapSync`, the server player 0's
+  new reference position.
+- Player 0's visit left the census when they left, and the file held their four lines (`VPlusMapSync` x1, the unknown one
+  x5); player 1's line of its own (x2) came next to them, player 0's stayed as they were; read back and written again,
+  the file was the same.
+
+The table of names: the game's own were read out of its decompiled code (183) and checked against a scan of the game's
+assembly by the same scanner that read the mods (it found all 183, and 4 strings that are no calls). Of the 7 mods' names
+seen on a live server before, the scan of the 300 mods found 5 on its own (the other two are made while the game runs, and
+are in the table by hand).
+
+The regression with this build: the tests of 1.27.1 again with the census off -- ward guard on and off, portal lock on and
+off, guardian stones (new and old), 20 portals (new and old), ward limit on and off, the console (22 checks), decay on the
+live copy (the DryRun report) and its test on the live copy and on pristine15 (110 checks each) -- gave the same lines as
+with 1.27.1, but for session ids, times and which pass a piece with a random due time fell in. The anti-cheat test, 30
+players, with the census on: 41 checks passed, and the census noted nothing (every call of the game's own). The census test
+on the same build: 14 of 14.

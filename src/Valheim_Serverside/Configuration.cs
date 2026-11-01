@@ -97,6 +97,8 @@ namespace PluginConfiguration
 		public static ConfigEntry<bool> decayExemptAdmins;
 		public static ConfigEntry<bool> decayLoginMessage;
 
+		public static ConfigEntry<bool> rpcCensusEnabled;
+
 		public static ConfigEntry<bool> antiCheatEnabled;
 		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Action> antiCheatAction;
 		public static ConfigEntry<bool> antiCheatExemptAdmins;
@@ -468,6 +470,9 @@ namespace PluginConfiguration
 			antiCheatSpeedLimit = config.Bind("AntiCheat", "SpeedLimit", 30f,
 				new ConfigDescription("Metres per second. A run is 7, a ship under a good wind 15; the mods that speed a player up on paths (SpeedyPaths: 1.4 times) stay well under this and are not caught by it.",
 					new AcceptableValueRange<float>(10f, 200f)));
+
+			rpcCensusEnabled = config.Bind<bool>("RpcCensus", "Enabled", false,
+				"Note every RPC a player's game sends that the game itself does not have: the mark a mod on their client leaves on the wire (a config sync, a map share, a version check). Which one (by name when it is in DS's table of mods' RPC names, else its hash), how often, to whom, and a few readable words out of it. One line in the log the first time a player sends each in a run, a summary when they leave, everything kept in <world>.rpcs.txt next to the world. Nothing is blocked or changed. Needs a restart.");
 
 			guardianStonesEnabled = config.Bind<bool>("GuardianStones", "Enabled", false,
 				"Show a boss's trophy on its guardian stone, and so offer its power, only to players who have beaten that boss themselves, as their own client's raid list shows it (the same reading as the night spawn guard). To everyone else's game the stone is empty: a vanilla client cannot take a power it cannot see, and the server could not take one back. Players who may not use a stone cannot hang a trophy on it either.");
