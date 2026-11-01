@@ -22,7 +22,9 @@ over 640 s: what the plugin does in its frame updates came to 0.98 s instead of 
 from 39 to 9 (longer than 50 ms, from 8 to 3). The ward guard's 14 ms every 5 s are gone; the portal lock takes 0.35 ms
 instead of 18 ms every 10 s, the guardian stones at most 0.02 ms instead of 16 ms every minute, a decay pass 18 ms instead
 of 80-97 ms (75 ms for the first one after a start). The world index costs 33 ms once, after the world has loaded, and its
-check every 10 minutes some 30 ms, spread over 50 frames of at most about 1 ms.
+check every 10 minutes some 30 ms, spread over 50 frames of at most about 1 ms. On the live server, where the old looks
+took 35-45 ms, the index took 121 ms to make and its first check 73 ms over 50 frames, at most 3.1 ms in one; it found
+the index right.
 
 ## [1.27.0] - 2026-11-01
 
