@@ -124,3 +124,52 @@ live copy (the DryRun report) and its test on the live copy and on pristine15 (1
 with 1.27.1, but for session ids, times and which pass a piece with a random due time fell in. The anti-cheat test, 30
 players, with the census on: 41 checks passed, and the census noted nothing (every call of the game's own). The census test
 on the same build: 14 of 14.
+
+## Web map
+
+1.29.0, tested on a copy of the live world (891,000 objects, 85,788 of them in the index, game 1.0.20) on server copies,
+the feature on with `Interval = 5` (the default is 30), the rest at its defaults, with simulated players from the test kit
+(`webmaptest`). What the plugin wrote is checked by `webmapcheck.py`, which works every expectation out on its own from the
+schedule of the run and the kit's log (numpy, float32 like the game; no code of the plugin is used). Three players:
+fake0 stays at the start, fake1 and fake2 go to far places and back; fake2's name holds a tab, a backslash, a quote,
+U+2028, an accented letter and an emoji; each has a host name of its own, as a Steam ID is.
+
+Run A, nothing kept before, 59 of 59 checks:
+- The three bins hold exactly the cells the independent reference marks (506, 506 and 609 after the visits; the first
+  scenes 253 = the game's disc of radius 9, a far place 506, back again still 506). The kit also called `Explore` with 22
+  positions on a scratch map; the plugin's cells, their box and their checksum equal the reference every time: the middle
+  of the map (253 cells), the corners (73), the edges where the disc is cut (117, 100), -12400 (1 cell) and beyond it (0),
+  `NaN`, both infinities, 1E+30 and `float.MaxValue` (0 cells, no error), and the points where the rounding ties
+  (`Mathf.RoundToInt` rounds half to even).
+- `index.tsv`: the accounts, their cells, four fields a row, the odd name with the tab and the line separator turned to
+  spaces.
+- `live.json`: `v`, `seed`, `time`, `online` 3, the three players with their positions, the public portals (3) and the
+  base squares (14 listed of the 36 that hold a builder's piece) equal what the kit counted on its own; no raw line
+  separator or control character in it; the world's name is in no file.
+- `places.json` (private folder only): 12,260 places as the kit counted them, 8 unique, the 8 `defeated_` keys. The placed
+  count of the first file may be up to 100 fewer than the kit's (it is written before the zones round the players are
+  loaded); after the 5-minute rewrite it is equal (2,391 of 2,391 in run B).
+- No temporary file, no `.bad`, no exception; the periodic save wrote the bins (74 s before the stop); a visit that began
+  4 s before the stop is in the bin, written by the last write ("written before the world is saved or the server stops").
+
+Run B, a second run on the files of A, `OnlyPublicPositions = true`, two players, 34 of 34: the maps of A were loaded and
+grew by this run's visits (1,012, 506 and 609 cells); the account that stayed away kept its row in `index.tsv` as it was,
+with its old "last seen"; `live.json` lists only the player who shows its position while `online` says 2.
+
+Run C, a third run after two bins were damaged (one cut at 100 bytes, one not a gzip at all), 35 of 35: both were kept as
+`.bad` with one warning each and those accounts started again; the intact map was loaded as it was (1,012 cells).
+
+Run D, the feature off, 3 of 3: no folder made, no line in the log. Run E, a `Directory` that cannot be made, 3 of 3: one
+warning and nothing else, nothing in the public folder either.
+
+Cost: the count of the pieces on the live copy (85,788 entries, 7,018 pieces with a builder, 36 squares) took 7 ms in all,
+the worst frame 2.5 to 2.6 ms (20,000 entries a frame).
+
+The regression with the build that is released: the index test, 17 checks passed (the baseline of 1.28.0 had 16; the kit
+has gained a check on the second pass since, the index code is the same), among them the check of the whole index (891,159
+objects in 50 frames, 29.8 ms in all, 1.17 ms in the worst frame); the console test gave the same lines as with 1.28.0;
+run A once more with that very DLL, 59 of 59. The other tests (ward guard, portal lock, decay, anti-cheat, census) were
+not repeated for this build: with `[WebMap]` off nothing of the feature runs (run D).
+
+Not tested: real players' clients, the live server, a web server that holds `live.json` open on Windows (the retry in the
+write is for that), and the web service that will read these files.

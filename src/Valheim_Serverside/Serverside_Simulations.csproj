@@ -125,6 +125,7 @@
     <Compile Include="Features\Decay.cs" />
     <Compile Include="Features\AntiCheat.cs" />
     <Compile Include="Features\RpcCensus.cs" />
+    <Compile Include="Features\WebMap.cs" />
     <Compile Include="Features\RpcNames.cs" />
     <Compile Include="Features\Progress.cs" />
     <Compile Include="Features\NightSpawnGuard.cs" />

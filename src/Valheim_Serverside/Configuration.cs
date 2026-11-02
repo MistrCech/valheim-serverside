@@ -99,6 +99,16 @@ namespace PluginConfiguration
 
 		public static ConfigEntry<bool> rpcCensusEnabled;
 
+		public static ConfigEntry<bool> webMapEnabled;
+		public static ConfigEntry<string> webMapDirectory;
+		public static ConfigEntry<string> webMapPublicDirectory;
+		public static ConfigEntry<int> webMapInterval;
+		public static ConfigEntry<bool> webMapOnlyPublicPositions;
+		public static ConfigEntry<float> webMapExploreRadius;
+		public static ConfigEntry<int> webMapBaseCell;
+		public static ConfigEntry<int> webMapBaseMinPieces;
+		public static ConfigEntry<bool> webMapPlaces;
+
 		public static ConfigEntry<bool> antiCheatEnabled;
 		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Action> antiCheatAction;
 		public static ConfigEntry<bool> antiCheatExemptAdmins;
@@ -473,6 +483,29 @@ namespace PluginConfiguration
 
 			rpcCensusEnabled = config.Bind<bool>("RpcCensus", "Enabled", false,
 				"Note every RPC a player's game sends that the game itself does not have: the mark a mod on their client leaves on the wire (a config sync, a map share, a version check). Which one (by name when it is in DS's table of mods' RPC names, else its hash), how often, to whom, and a few readable words out of it. One line in the log the first time a player sends each in a run, a summary when they leave, everything kept in <world>.rpcs.txt next to the world. Nothing is blocked or changed. Needs a restart.");
+
+			webMapEnabled = config.Bind<bool>("WebMap", "Enabled", false,
+				"Write what a web map of the world needs, as files for a program that serves them (nothing is sent anywhere): live.json (who is online and where, the public portals, how many player-built pieces are in each square of BaseCellMetres), places.json (every location of the world, which bosses are beaten) and, for each account, the part of the map it has been through (a disc of ExploreRadius round the character every 2 s, marked as the game marks its own map). The map each player has in their game is never sent to the server, so this one starts when the feature does. Needs a restart.");
+			webMapDirectory = config.Bind<string>("WebMap", "Directory", "",
+				"Where the private files go (places.json, explored/): nothing in it is for the public. Empty: <world>.webmap next to the world.");
+			webMapPublicDirectory = config.Bind<string>("WebMap", "PublicDirectory", "",
+				"Where live.json goes, the one file a web server may hand to anyone. Empty: Directory.");
+			webMapInterval = config.Bind<int>("WebMap", "Interval", 30,
+				new ConfigDescription("Seconds between two writes of live.json.",
+					new AcceptableValueRange<int>(5, 600)));
+			webMapOnlyPublicPositions = config.Bind<bool>("WebMap", "OnlyPublicPositions", false,
+				"List only the players who have switched on 'show my position' on the game's own map (their client says so, ZNetPeer.m_publicRefPos). false: every player online is listed, whatever they chose in the game. Their explored map is kept for each either way.");
+			webMapExploreRadius = config.Bind<float>("WebMap", "ExploreRadius", 100f,
+				new ConfigDescription("Metres a character explores round itself (the game's own is 100: a disc of ceil(radius / 12) cells of its 12 m grid).",
+					new AcceptableValueRange<float>(20f, 300f)));
+			webMapBaseCell = config.Bind<int>("WebMap", "BaseCellMetres", 512,
+				new ConfigDescription("Side of the squares the player-built pieces are counted in for live.json. Nothing finer than a square leaves the server.",
+					new AcceptableValueRange<int>(128, 2048)));
+			webMapBaseMinPieces = config.Bind<int>("WebMap", "BaseMinPieces", 15,
+				new ConfigDescription("A square with fewer pieces (with a builder) than this is not listed: a campfire and a few planks are no base.",
+					new AcceptableValueRange<int>(1, 1000)));
+			webMapPlaces = config.Bind<bool>("WebMap", "Places", true,
+				"Write places.json (every location the world has, placed or not, and the world keys of the bosses beaten) every 5 minutes. It is the world's secrets: keep Directory out of reach of the public.");
 
 			guardianStonesEnabled = config.Bind<bool>("GuardianStones", "Enabled", false,
 				"Show a boss's trophy on its guardian stone, and so offer its power, only to players who have beaten that boss themselves, as their own client's raid list shows it (the same reading as the night spawn guard). To everyone else's game the stone is empty: a vanilla client cannot take a power it cannot see, and the server could not take one back. Players who may not use a stone cannot hang a trophy on it either.");

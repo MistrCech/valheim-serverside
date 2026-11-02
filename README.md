@@ -1,6 +1,6 @@
 # Sarkastic.gg Dedicated Simulation
 
-![version: 1.28.0](https://img.shields.io/badge/version-1.28.0-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.20](https://img.shields.io/badge/Valheim-1.0.20-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)  ![license: MIT (own code)](https://img.shields.io/badge/license-MIT%20%28own%20code%29-5b5f66?style=flat-square)
+![version: 1.29.0](https://img.shields.io/badge/version-1.29.0-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.20](https://img.shields.io/badge/Valheim-1.0.20-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)  ![license: MIT (own code)](https://img.shields.io/badge/license-MIT%20%28own%20code%29-5b5f66?style=flat-square)
 
 [Source code](https://github.com/MistrCech/valheim-serverside)  ·  [Report a bug](https://github.com/MistrCech/valheim-serverside/issues/new)  ·  [Changelog](https://github.com/MistrCech/valheim-serverside/blob/main/CHANGELOG.md)  ·  [Resource Regrowth](https://thunderstore.io/c/valheim/p/Sarkastic_gg/Resource_Regrowth/)
 
@@ -66,6 +66,7 @@ Compared to Serverside Simulations 1.1.9 (details in the [changelog](CHANGELOG.m
 - **Anti-cheat** (off by default): the server looks at every object a player's game creates and takes away -- and by default kicks the player for -- what the unmodified game cannot make: a thistle, berry bush or ore planted with the cultivator, crops put down in groups faster than the game plants (unless the player's stamina paid for them: `PaidPlanting`), a piece placed in someone else's ward, far from the player or where nothing may be built, a stack larger than its item can be, the field overrides of the build-anything admin hammers, a character that flies. It can only see what a cheat leaves in the world; below is what 65 popular cheat and tweak mods leave -- see below.
 - **RPC census** (off by default): every call a player's game sends that the game does not have -- a mod's -- noted with the mod's name where known, in `<world>.rpcs.txt`: which mods your players run. Nothing is blocked.
 - **Location icons** (off by default): a trader's (Haldor, Hildir, the Bog Witch) and other locations' map icons only for players who have found that place themselves; vanilla shows them to everyone the moment anyone's presence has generated the zone -- see below.
+- **Web map** (off by default): files for a web map of the world -- who is online and where, open portals, how many pieces players have built in each 512 m square, every location, and the part of the map each player has been through (made again on the server from where they walk) -- for a program of yours to serve. Nothing is sent anywhere.
 - **Dvergr trade** (off by default): the dvergr of the Mistlands are friends, and their camps hold what a player needs. Next to each dvergr ward the server puts up a chest and a sign; what a player puts into the chest and closes -- seeker trophies, say -- is weighed against a list of offers, the price taken and the goods (black marble, soft tissue, black cores ...) left in its place, or the camp's ward switched off for some hours and its angry dvergr calmed, so what lies in the camp can be taken without a fight. Vanilla clients; nothing to install -- see below.
 - **Processor placement** (off by default): the server pinned to one chiplet of an AMD EPYC or Ryzen (a die with its own L3 cache), the least busy one at startup, or to processors you name, and a higher process priority.
 - **Safety:** a startup check warns when a vanilla method the mod replaces has changed in a game update; if the core patches cannot be applied, the mod removes itself and the server runs vanilla.
@@ -181,6 +182,10 @@ Clients need nothing.
 | `[RpcCensus] Enabled` | false | Note every RPC a player's game sends that the game does not have (see RPC census below). Nothing is blocked or changed. Needs a restart. |
 | `[LocationIcons] Enabled` | false | Show a location's map icon (Haldor, Hildir, the Bog Witch, Hildir's dungeons, the Deep North boss room, the ancient upgrade station) only to players who have been near it themselves; remembered per character in `<world>.icons.txt`. The start temple's icon stays for everyone. |
 | `[LocationIcons] DiscoverRadius` | 0 | How near (metres, horizontally) a player must have been to a location for its icon to appear on their map. 0: as near as the game itself shows it -- the location's zone within the simulation distance of the player's zone (4 zones by default, about 256-320 m straight ahead). |
+| `[WebMap] Enabled` | false | Write the files of a web map (see Web map below). Needs a restart. |
+| `[WebMap] Directory` / `PublicDirectory` | empty | Where the private files (`places.json`, `explored/`) and the one public file (`live.json`) go. Empty: `<world>.webmap` next to the world. |
+| `[WebMap] Interval` / `OnlyPublicPositions` | 30 / false | Seconds between two writes of `live.json`; `true`: list only players who show their position on the game's map. |
+| `[WebMap] ExploreRadius` / `BaseCellMetres` / `BaseMinPieces` / `Places` | 100 / 512 / 15 / true | Metres a character explores; side of the squares pieces are counted in; squares with fewer pieces are left out; write `places.json`. |
 | `[FireControl] Enabled` | false | Limit how far fire spreads (see Fire control below). With the three settings below at their defaults it changes nothing. |
 | `[FireControl] MaxRadius` | -1 | A fire starts only within this many metres (straight line) of the source its chain began at. -1: no limit. |
 | `[FireControl] MaxSpread` | -1 | Caps how many further generations of sparks any fire may set off. 0: nothing throws sparks except an arrow or fireball where it lands. -1: as in the game. |
@@ -405,6 +410,10 @@ A number above 0 is metres. A player who finds one gets its icon within two seco
 own pins are not touched. Tested with two simulated players on a copy of the live world: far away both
 were sent only the start temple; the one taken to the ancient upgrade station got its icon too, the
 other did not; after a restart the first one got both icons at once.
+
+## Web map
+
+With `[WebMap] Enabled` the server writes, for a program of yours to serve, `live.json` (the players online with their positions, the portals open to everyone, the player-built pieces counted per 512 m square -- no builder, no exact place), `places.json` (every location of the world and the bosses beaten) and, per account, the part of the map the player has been through. That last one lives only in the player's game and never reaches the server, so the server makes it again from where the character is, every 2 seconds, as the game does: it starts when the feature does, and what a cartography table gives is not counted. Only `live.json` is meant for the public. Formats, folders and limits: [docs/WEBMAP.md](https://github.com/MistrCech/valheim-serverside/blob/main/docs/WEBMAP.md).
 
 ## Fire control
 
