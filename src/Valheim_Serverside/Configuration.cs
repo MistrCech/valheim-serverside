@@ -298,11 +298,10 @@ namespace PluginConfiguration
 
 			welcomeEnabled = config.Bind<bool>("CharacterGuard", "Welcome", false,
 				"Greet a character the first time it joins this world: WelcomeTitle in the middle of the screen, then each of WelcomeLines in the top left corner. A vanilla client shows it; nothing to install.");
-			welcomeTitle = config.Bind<string>("CharacterGuard", "WelcomeTitle", "Welcome to Sarkastic.gg",
+			welcomeTitle = config.Bind<string>("CharacterGuard", "WelcomeTitle", "Welcome",
 				"Shown in the middle of the screen a few seconds after a new character is let in. Empty = none.");
-			welcomeLines = config.Bind<string>("CharacterGuard", "WelcomeLines",
-				"Build a workbench to keep your area as it is: without one, a zone grows back as new after 72 h with nobody near.|A zone growing back never removes your buildings, chests or portals.|Fire spreads only from fire arrows, staffs, meteors and lava.|More at sarkastic.gg",
-				"Shown one after another in the top left corner after WelcomeTitle. Separated by |.");
+			welcomeLines = config.Bind<string>("CharacterGuard", "WelcomeLines", "",
+				"Shown one after another in the top left corner after WelcomeTitle, for example the rules of the server. Separated by |. Empty = none.");
 			locationIconsEnabled = config.Bind<bool>("LocationIcons", "Enabled", false,
 				"Show a location's map icon (the traders Haldor, Hildir and the Bog Witch, Hildir's dungeons, the Deep North boss room, the ancient upgrade station) only to players who have been near it themselves. Vanilla sends every player the icon as soon as anyone's presence has generated the location's zone, and the map shows it whether the player has explored there or not. Found icons are remembered per character in <world>.icons.txt. The start temple's icon stays for everyone.");
 			locationIconsDiscoverRadius = config.Bind<float>("LocationIcons", "DiscoverRadius", 0f,

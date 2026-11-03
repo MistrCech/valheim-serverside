@@ -123,7 +123,7 @@ Clients need nothing.
 | `[CharacterGuard] FreshEvent` | `army_eikthyr` | The raid a fresh character is still ready for. The game stops that once a character knows the antler, the bronze or iron pickaxe, hard antler or Eikthyr's trophy. |
 | `[CharacterGuard] NewCharacterMessage` / `ChangedAwayMessage` | (English text) | Shown in the middle of the player's screen before the kick. |
 | `[CharacterGuard] Welcome` | false | Greet a character the first time it joins this world. |
-| `[CharacterGuard] WelcomeTitle` / `WelcomeLines` | (English text) | The greeting in the middle of the screen, then the lines (separated by `\|`) in the top left corner. |
+| `[CharacterGuard] WelcomeTitle` / `WelcomeLines` | `Welcome` / empty | The greeting in the middle of the screen, then the lines (separated by `\|`, for example the rules of the server) in the top left corner. |
 | `[ItemLedger] Mode` | Off | `Off`, `LogOnly` or `On`: keep item accounts per character (see Item ledger below); `On` also takes away items that came from another world. |
 | `[ItemLedger] Items` | auto | `auto`: the items that lock progress, from the game's own data (see below). Or item prefab names, comma separated. Items traders sell are always left out. |
 | `[ItemLedger] ExtraItems` / `ExcludeItems` | (empty) | Item prefab names to add to the list, or never to keep accounts of. |

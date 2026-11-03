@@ -176,13 +176,28 @@ count of the pieces at all (nothing was counted); the log says what is public ("
 Cost: the count of the pieces on the live copy (85,788 entries, 7,018 pieces with a builder, 36 squares) took 7 ms in all,
 the worst frame 2.3 to 2.4 ms (20,000 entries a frame), and it is not run at all with `Bases = false`.
 
-The regression with the build that is released: the index test, 17 checks passed (the baseline of 1.28.0 had 16; the kit
-has gained a check on the second pass since, the index code is the same), among them the check of the whole index (891,159
-objects in 50 frames, 29.8 ms in all, 1.17 ms in the worst frame); the console test, 22 checks, 0 failed, with the very same
-verdict lines as with 1.28.0 (one more message of the console, after the verdict: the 40 s watch on a player whose game does
-not teleport ran out after the test had ended, this time). All the runs above were made with one build of the final source.
+The regression with the final build (the DLL whose SHA-256 begins `e9e7d178`): the index test, 17 checks passed (the baseline of
+1.28.0 had 16; the kit has gained a check on the second pass since, the index code is the same), among them the check of the
+whole index (891,161 objects in 50 frames, 26.8 ms in all, 1.01 ms in the worst frame); the console test, 22 checks, 0 failed,
+its whole summary (135 lines, the messages of the console too) the same as with 1.28.0 once the numbers and the hash of the DLL
+are left out. Runs A to G, the index test, the console test and the greeting test below were all made with this one build.
 The other tests (ward guard, portal lock, decay, anti-cheat, census) were not repeated for this build: with `[WebMap]` off
 nothing of the feature runs (run D).
 
 Not tested: real players' clients, the live server, a web server that holds `live.json` open on Windows (the retry in the
 write is for that), and the program that will read these files (it is not part of the plugin).
+
+## Character guard: the greeting
+
+1.29.0, the default text of `[CharacterGuard] Welcome` (off by default) names no server any more: the title is `Welcome` and
+there are no lines (it said "Welcome to Sarkastic.gg" and explained one server's zones and fire). Tested with `welcomerun.sh`
+on a copy of the live world, the guard and `Welcome` on, with two simulated new characters that the guard lets in (they are
+ready for `FreshEvent`, so they are "new and fresh"); the kit logs what each of them was shown.
+
+- W1, a config without the text keys: both are greeted 6 s after they are let in ("welcomed fake0", "welcomed fake1"). Each was
+  shown the title `Welcome` in the middle of the screen and nothing in the top left corner (the middle text is sent again every
+  second while it is held, three times in all). The config the plugin wrote holds `WelcomeTitle = Welcome` and an empty
+  `WelcomeLines`.
+- W2, a config that holds the old text, as the live server's does (the title and four lines): each was shown that text as it
+  is, the title in the middle and the four lines in the top left corner. A config that already has the keys is not touched by
+  the new defaults.

@@ -16,6 +16,13 @@
   memory only while its player is online. On a copy of a world of 85,788 index entries the count of the pieces took 8 ms in
   all, 3 ms the worst frame. Formats, how to draw the files and limits: [docs/WEBMAP.md](docs/WEBMAP.md). Needs a restart.
 
+### Changed
+
+- The default greeting of `[CharacterGuard] Welcome` (off by default) names no server and describes no one's mechanics: the
+  title is `Welcome` and there are no lines. It used to say "Welcome to Sarkastic.gg" and to explain how zones grow back
+  and how fire spreads on that server. A config that already holds a text keeps it: only a config without the keys gets
+  the new defaults.
+
 ## [1.28.0] - 2026-11-01
 
 ### Added
