@@ -1,18 +1,20 @@
-## [1.29.0] - 2026-11-02
+## [1.29.0] - 2026-11-03
 
 ### Added
 
-- Web map (`[WebMap] Enabled`, off by default): the server writes what a web map of the world needs, as files for a program
-  of yours to serve (nothing is sent anywhere). `live.json`, every 30 s and the one file for the public: the players online
-  with their positions (or only those who show their position on the game's map, `OnlyPublicPositions`), the portals open to
-  everyone, and the player-built pieces counted per 512 m square -- no builder, no exact place. `places.json`, private,
-  every 5 minutes: every location of the world, placed or not, and the bosses beaten. `explored/<account>.bin`, private:
-  the part of the map each account has been through. That lives only in the player's game and never reaches the server, so
-  the server makes it again from where the character is, every 2 s, with the disc the game itself marks (9 cells of 12 m);
-  it starts when the feature does, and what a cartography table gives is not counted. Files are written by a background
-  thread through a temporary file; a map is held in memory only while its player is online. On a copy of the live world the
-  count of the pieces (85,788 index entries) took 8 ms in all, 3 ms the worst frame. Formats and limits:
-  [docs/WEBMAP.md](docs/WEBMAP.md). Needs a restart.
+- Web map (`[WebMap] Enabled`, off by default): the server writes the files a map of the world can be made from, for a
+  program of yours to serve. Nothing is sent anywhere, and no map or web page comes with it: anyone can build one on the
+  files. `live.json`, every 30 s and the one file for the public: the players online with their positions (by default only
+  those who show their position on the game's map, `OnlyPublicPositions`), with `PortalPrefix` the portals whose tag begins
+  with it, with `Bases` the player-built pieces counted per 512 m square -- no builder, no exact place -- and an id of the
+  world, not its seed. `places.json`, private, every 5 minutes: the seed, every location of the world, placed or not, and the
+  bosses beaten. `explored/<account>.bin`, private: the part of the map each account has been through. That lives only in the
+  player's game and never reaches the server, so the server makes it again from where the character is, every 2 s, with the
+  disc the game itself marks (9 cells of 12 m); it starts when the feature does, and what a cartography table gives is not
+  counted. By default the public file lists only players who show their position, no portals and no bases, and goes to the
+  folder `public` inside the private one. Files are written by a background thread through a temporary file; a map is held in
+  memory only while its player is online. On a copy of a world of 85,788 index entries the count of the pieces took 8 ms in
+  all, 3 ms the worst frame. Formats, how to draw the files and limits: [docs/WEBMAP.md](docs/WEBMAP.md). Needs a restart.
 
 ## [1.28.0] - 2026-11-01
 

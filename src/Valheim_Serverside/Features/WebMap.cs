@@ -17,11 +17,12 @@ namespace Valheim_Serverside.Features
 	/*
 		What a web map of the world needs, written as files for a program that serves them (nothing here talks to the network):
 
-		live.json (public, every Interval seconds): who is online and where, the public portals (a tag that begins with the
-		portal lock's PublicPrefix), and the player-built pieces counted in squares of BaseCellMetres -- no builders, no exact
-		places. places.json (private, every 5 minutes): every location of the world (what the game placed, and what it has not
-		placed yet) and which bosses are beaten. explored/<account>.bin (private): the part of the map each account has been
-		through, kept the way the game keeps its own map.
+		live.json (public, every Interval seconds): who is online and where (all of them, or those who show their position), the
+		portals whose tag begins with PortalPrefix, and with Bases the player-built pieces counted in squares of BaseCellMetres --
+		no builders, no exact places; the world's id, not its seed (the seed makes the whole world, the places of its secrets
+		included). places.json (private, every 5 minutes): the seed, every location of the world (what the game placed, and what
+		it has not placed yet) and which bosses are beaten. explored/<account>.bin (private): the part of the map each account
+		has been through, kept the way the game keeps its own map.
 
 		A player's explored map lives in their game only (Minimap.m_explored is saved in the character and never sent), so here it
 		is made again from where the character is: every 2 s a disc of the same size as the game's -- ceil(ExploreRadius / 12)
@@ -231,7 +232,7 @@ namespace Valheim_Serverside.Features
 				string pub = Configuration.webMapPublicDirectory.Value;
 				if (string.IsNullOrWhiteSpace(pub))
 				{
-					pub = dir;
+					pub = Path.Combine(dir, "public");
 				}
 				Directory.CreateDirectory(Path.Combine(dir, "explored"));
 				Directory.CreateDirectory(pub);
@@ -591,7 +592,8 @@ namespace Valheim_Serverside.Features
 		{
 			bool onlyPublic = Configuration.webMapOnlyPublicPositions.Value;
 			StringBuilder text = new StringBuilder(4096);
-			text.Append("{\"v\":1,\"t\":").Append(Unix().ToString(Inv)).Append(",\"seed\":").Append(ZNet.World.m_seed.ToString(Inv));
+			// The id of the world, a string (a long does not survive a JavaScript number). Not the seed: that makes the whole world.
+			text.Append("{\"v\":1,\"t\":").Append(Unix().ToString(Inv)).Append(",\"world\":\"").Append(ZNet.World.m_uid.ToString(Inv)).Append('"');
 			text.Append(",\"time\":");
 			Number(text, (float)ZNet.instance.GetTimeSeconds(), "0.0");
 			int online = 0;
@@ -619,7 +621,7 @@ namespace Valheim_Serverside.Features
 				players.Append('}');
 			}
 			text.Append(",\"online\":").Append(online.ToString(Inv)).Append(",\"players\":[").Append(players).Append("],\"portals\":[");
-			string prefix = Configuration.portalLockPublicPrefix.Value;
+			string prefix = Configuration.webMapPortalPrefix.Value;
 			bool first = true;
 			if (!string.IsNullOrEmpty(prefix))
 			{
@@ -639,7 +641,7 @@ namespace Valheim_Serverside.Features
 				}
 			}
 			text.Append("],\"bases\":");
-			if (s_bases == null)
+			if (!Configuration.webMapBases.Value || s_bases == null)
 			{
 				text.Append("null");
 			}
@@ -677,6 +679,10 @@ namespace Valheim_Serverside.Features
 		// The pieces that have a builder, counted per square, a slice of the world index per frame.
 		private static void CountBases(float now)
 		{
+			if (!Configuration.webMapBases.Value)
+			{
+				return;
+			}
 			if (s_scanList == null)
 			{
 				if (now < s_nextBases || !WorldIndex.Ready())
@@ -731,7 +737,7 @@ namespace Valheim_Serverside.Features
 				return null;
 			}
 			StringBuilder text = new StringBuilder(all.Count * 70 + 512);
-			text.Append("{\"v\":1,\"t\":").Append(Unix().ToString(Inv)).Append(",\"seed\":").Append(ZNet.World.m_seed.ToString(Inv)).Append(",\"defeated\":[");
+			text.Append("{\"v\":1,\"t\":").Append(Unix().ToString(Inv)).Append(",\"world\":\"").Append(ZNet.World.m_uid.ToString(Inv)).Append("\",\"seed\":").Append(ZNet.World.m_seed.ToString(Inv)).Append(",\"defeated\":[");
 			bool first = true;
 			foreach (string key in ZoneSystem.instance.GetGlobalKeys().Where(k => k.StartsWith("defeated_", StringComparison.Ordinal)).OrderBy(k => k, StringComparer.Ordinal))
 			{
@@ -771,7 +777,9 @@ namespace Valheim_Serverside.Features
 				ServersidePlugin.logger.LogInfo($"Web map: writing {s_publicDir}{Path.DirectorySeparatorChar}live.json every {Configuration.webMapInterval.Value} s"
 					+ (Configuration.webMapPlaces.Value ? ", places.json" : "") + $" and the explored maps ({s_accounts.Count} account(s) so far) in {s_dir}; "
 					+ $"a player explores a disc of {Mathf.Max(1, Mathf.CeilToInt(radius / PixelMetres))} cells ({radius:0} m), "
-					+ (Configuration.webMapOnlyPublicPositions.Value ? "only players who show their position are listed" : "every player online is listed") + ".");
+					+ (Configuration.webMapOnlyPublicPositions.Value ? "only players who show their position are listed" : "every player online is listed")
+					+ (string.IsNullOrEmpty(Configuration.webMapPortalPrefix.Value) ? ", no portals" : $", the portals tagged {Configuration.webMapPortalPrefix.Value}")
+					+ (Configuration.webMapBases.Value ? $", base squares of {Configuration.webMapBaseCell.Value} m" : ", no base squares") + ".");
 			}
 			if (now >= s_nextExplore)
 			{
