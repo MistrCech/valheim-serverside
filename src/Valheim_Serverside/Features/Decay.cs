@@ -26,7 +26,16 @@ namespace Valheim_Serverside.Features
 		lives while either end is held. A builder who is exempt (admins, and whoever `decay exempt` names) is always active
 		for their own pieces and for the ward and workbench they built over their own pieces; over the pieces of others
 		their ward or workbench holds only as long as its keepers really play, and a guest who is exempt on someone else's
-		ward list counts as the guest they are.
+		ward list counts as the guest they are. So under one ward there can be two claims at once: the builder's own pieces
+		(never away, when the builder is exempt) and the pieces of others (held only by what the keepers really did); a
+		base is the pieces that share a claim, by its key and the time it lapses, so they are two bases and the result
+		does not depend on which piece the pass comes to first.
+
+		The pass over the world runs in slices of some 4 ms of a frame each, the way the tick runs it,
+		instead of 20 to 80 ms in one go: it takes a copy of the list of objects, works through it, and gives the frame back
+		(yield) every few hundred objects when its slice is spent. Who is in the game is read again after the slices, before
+		anything is judged or started. The console's `decay scan`, a login that finds the status old, and the tests run the
+		whole pass at once.
 
 		A player is active when they have been in the game ActiveMinutes in one go (a quick login is no activity). Nothing
 		starts or is taken down while one of the players who hold the base is in the game, or while a player stands by a
@@ -246,6 +255,17 @@ namespace Valheim_Serverside.Features
 		private static float s_nextTrack, s_nextScan, s_nextSave, s_lastScan = -1000f;
 		private static string s_lastSummary = "";
 		private static int s_dryDue = -1;
+
+		// A pass is cut into slices of about s_sliceMs, one a frame, so that the server does not stand still for a whole pass (the world has
+		// 100 000 objects to look at, the first pass of a run more). `Scan` runs a pass at once (the console, a login that finds the status
+		// old, the tests); `Step` is what the tick does. The kit changes s_sliceMs.
+		private static IEnumerator<bool> s_run;
+		private static bool s_sliced;
+		private static float s_sliceMs = 4f;
+		private static readonly System.Diagnostics.Stopwatch s_slice = new System.Diagnostics.Stopwatch();
+		private static double s_workMs, s_longestMs;
+		private static int s_slices;
+		private static string s_scanDid = "";
 
 		private const float TrackSeconds = 20f;
 		private const float SaveSeconds = 120f;
@@ -569,18 +589,59 @@ namespace Valheim_Serverside.Features
 		*/
 		private static string Scan()
 		{
-			if (s_failed || !s_loaded || s_wardRadius == null)
+			// a pass in slices that is not finished is dropped: this one reads the world afresh
+			s_run = null;
+			s_sliced = false;
+			s_workMs = s_longestMs = 0.0;
+			s_slices = 0;
+			s_slice.Restart();
+			IEnumerator<bool> pass = ScanSteps();
+			while (pass.MoveNext())
 			{
-				return "";
 			}
-			s_lastScan = Time.time;
-			s_nextScan = Time.time + Math.Max(1f, Configuration.decayScanMinutes.Value) * 60f;
-			Mode mode = Configuration.decayMode.Value;
-			DateTime now = Now();
-			long nowUnix = Unix(now);
-			System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+			return s_scanDid;
+		}
 
-			// Who is in the game: by the character, or by the last character a connected player had (between two characters).
+		// The tick: a slice of the pass in progress, or the start of a new one.
+		private static void Step()
+		{
+			if (s_run == null)
+			{
+				s_run = ScanSteps();
+				s_sliced = true;
+				s_workMs = s_longestMs = 0.0;
+				s_slices = 0;
+			}
+			s_slice.Restart();
+			bool more = false;
+			try
+			{
+				more = s_run.MoveNext();
+			}
+			finally
+			{
+				double took = s_slice.Elapsed.TotalMilliseconds;
+				s_workMs += took;
+				s_longestMs = Math.Max(s_longestMs, took);
+				s_slices++;
+				if (!more)
+				{
+					s_run = null;
+					s_sliced = false;
+				}
+			}
+		}
+
+		// This slice has had its time (only a pass the tick runs is cut up).
+		private static bool Spent()
+		{
+			return s_sliced && s_slice.Elapsed.TotalMilliseconds >= s_sliceMs;
+		}
+
+		// Who is in the game: by the character, or by the last character a connected player had (between two characters). True when a
+		// player is still connecting (we do not know who they are yet).
+		private static bool CollectOnline()
+		{
 			s_online.Clear();
 			s_peerPositions.Clear();
 			bool someoneLoading = false;
@@ -605,6 +666,23 @@ namespace Valheim_Serverside.Features
 				}
 				s_peerPositions.Add(peer.GetRefPos());
 			}
+			return someoneLoading;
+		}
+
+		private static IEnumerator<bool> ScanSteps()
+		{
+			s_scanDid = "";
+			if (s_failed || !s_loaded || s_wardRadius == null)
+			{
+				yield break;
+			}
+			s_lastScan = Time.time;
+			s_nextScan = Time.time + Math.Max(1f, Configuration.decayScanMinutes.Value) * 60f;
+			Mode mode = Configuration.decayMode.Value;
+			DateTime now = Now();
+			long nowUnix = Unix(now);
+
+			bool someoneLoading = CollectOnline();
 			// What is undone is always done; what destroys waits while a player is connecting (we do not know who they are yet) and while the file cannot be written.
 			bool write = mode == Mode.On;
 			bool strike = write && !someoneLoading && !s_saveFailing;
@@ -629,23 +707,37 @@ namespace Valheim_Serverside.Features
 			List<Piece> pieces = new List<Piece>();
 			HashSet<int> skip = s_notPieces;
 			Dictionary<int, int> builtButSkipped = s_notPiecesChecked ? null : new Dictionary<int, int>();
-			IEnumerable<ZDO> objects = ZDOMan.instance.m_objectsByID.Values;
+			// The objects as they are when the pass starts, a copy: the world goes on between two slices (an object that is gone by the time
+			// it is read is read all the same, and a piece built since is for the next pass).
+			List<ZDO> objects;
 			if (skip != null && builtButSkipped == null && WorldIndex.Ready())
 			{
-				List<ZDOID> built = WorldIndex.Built;
-				List<ZDO> found = new List<ZDO>(built.Count);
-				foreach (ZDOID id in built)
+				ZDOID[] built = WorldIndex.Built.ToArray();
+				objects = new List<ZDO>(built.Length);
+				for (int i = 0; i < built.Length; i++)
 				{
-					ZDO zdo = ZDOMan.instance.GetZDO(id);
-					if (zdo != null)
+					ZDO found = ZDOMan.instance.GetZDO(built[i]);
+					if (found != null)
 					{
-						found.Add(zdo);
+						objects.Add(found);
+					}
+					if ((i & 255) == 255 && Spent())
+					{
+						yield return true;
 					}
 				}
-				objects = found;
 			}
-			foreach (ZDO zdo in objects)
+			else
 			{
+				objects = new List<ZDO>(ZDOMan.instance.m_objectsByID.Values);
+			}
+			for (int oi = 0; oi < objects.Count; oi++)
+			{
+				if ((oi & 255) == 255 && Spent())
+				{
+					yield return true;
+				}
+				ZDO zdo = objects[oi];
 				int prefab = zdo.GetPrefab();
 				if (skip != null && skip.Contains(prefab))
 				{
@@ -718,9 +810,14 @@ namespace Valheim_Serverside.Features
 				}
 			}
 			s_pieceById.Clear();
+			int turn = 0;
 			foreach (Piece piece in pieces)
 			{
 				s_pieceById[piece.id] = piece;
+				if ((++turn & 255) == 0 && Spent())
+				{
+					yield return true;
+				}
 			}
 			ProtectorGrid grid = new ProtectorGrid(protectors);
 			s_alone.Clear();
@@ -740,6 +837,10 @@ namespace Valheim_Serverside.Features
 			Dictionary<ZDOID, Candidate> bestOf = new Dictionary<ZDOID, Candidate>();
 			foreach (Piece piece in pieces)
 			{
+				if ((++turn & 255) == 0 && Spent())
+				{
+					yield return true;
+				}
 				if (piece.stampEpisode == 0 || piece.stampAt == 0L)
 				{
 					// A mark that has lost its time (a game handed back half of it) is no mark: the piece is judged as any other.
@@ -794,6 +895,10 @@ namespace Valheim_Serverside.Features
 			Dictionary<long, List<Vector3>> shelter = new Dictionary<long, List<Vector3>>();
 			foreach (Piece piece in unmarked)
 			{
+				if ((++turn & 255) == 0 && Spent())
+				{
+					yield return true;
+				}
 				Candidate best = Best(piece, protectors, grid);
 				bestOf[piece.id] = best;
 				if (best.start > now)
@@ -830,6 +935,12 @@ namespace Valheim_Serverside.Features
 				}
 				return false;
 			};
+			// The slices of this pass took a while: whoever has come into the game since counts.
+			if (s_sliced)
+			{
+				someoneLoading = CollectOnline();
+				strike = write && !someoneLoading && !s_saveFailing;
+			}
 			List<Piece> due = new List<Piece>(), worn = new List<Piece>();
 			foreach (Piece piece in marked)
 			{
@@ -898,10 +1009,18 @@ namespace Valheim_Serverside.Features
 			Dictionary<string, Base> bases = new Dictionary<string, Base>();
 			foreach (Piece piece in unmarked)
 			{
-				Candidate best = bestOf[piece.id];
-				if (!bases.TryGetValue(best.key, out Base b))
+				if ((++turn & 255) == 0 && Spent())
 				{
-					bases[best.key] = b = new Base { candidate = best };
+					yield return true;
+				}
+				Candidate best = bestOf[piece.id];
+				// A claim is its key and the time it lapses. Under one ward the builder's own pieces (an exempt builder is never away) and the
+				// pieces of others (held only as long as the keepers really play) are two claims, so two bases: before, the claim of the first
+				// piece the pass came to was the claim of all of them, and the base began or did not depending on the order of the pieces.
+				string group = best.key + "@" + Inv(best.start.Ticks);
+				if (!bases.TryGetValue(group, out Base b))
+				{
+					bases[group] = b = new Base { candidate = best };
 				}
 				b.pieces.Add(piece);
 			}
@@ -911,6 +1030,12 @@ namespace Valheim_Serverside.Features
 			int begun = 0, postponed = 0;
 			foreach (Base b in bases.Values.OrderBy(x => x.candidate.start).ThenBy(x => x.candidate.key, StringComparer.Ordinal))
 			{
+				if (Spent())
+				{
+					yield return true;
+					someoneLoading = CollectOnline();
+					strike = write && !someoneLoading && !s_saveFailing;
+				}
 				Candidate c = b.candidate;
 				double daysTo = (c.start - now).TotalDays;
 				if (now >= c.start)
@@ -1008,13 +1133,14 @@ namespace Valheim_Serverside.Features
 			if (summary != s_lastSummary)
 			{
 				s_lastSummary = summary;
-				ServersidePlugin.logger.LogInfo($"Decay ({mode}): {summary}; scan took {watch.Elapsed.TotalMilliseconds:0.0} ms");
+				double last = s_slice.Elapsed.TotalMilliseconds;
+				ServersidePlugin.logger.LogInfo($"Decay ({mode}): {summary}; scan took {s_workMs + last:0.0} ms in {s_slices + 1} slice(s), the longest {Math.Max(s_longestMs, last):0.0} ms");
 			}
 			if (s_dirty)
 			{
 				Save();
 			}
-			return string.Join("\n", did);
+			s_scanDid = string.Join("\n", did);
 		}
 
 		// An admin the server has not seen online yet, but the character guard has (it keeps the account of every character).
@@ -1501,7 +1627,9 @@ namespace Valheim_Serverside.Features
 			}
 			if (Configuration.decayMode.Value == Mode.Off)
 			{
-				// The decay clock stands still while decay is off.
+				// The decay clock stands still while decay is off, and a pass in slices is dropped.
+				s_run = null;
+				s_sliced = false;
 				if (s_watch.IsRunning)
 				{
 					s_watch.Stop();
@@ -1531,9 +1659,9 @@ namespace Valheim_Serverside.Features
 			{
 				Track();
 			}
-			if (Time.time >= s_nextScan)
+			if (s_run != null || Time.time >= s_nextScan)
 			{
-				Scan();
+				Step();
 			}
 			if (Time.time >= s_nextSave)
 			{

@@ -1,3 +1,23 @@
+## [1.29.1] - 2026-11-04
+
+### Fixed
+
+- Decay: under one ward there can be two claims, the builder's own pieces (an exempt builder is never away) and the pieces
+  of others (held only as long as the keepers really play). The pass gave every piece under a ward the claim of the first
+  piece it came to, so whether the base of the strangers' pieces began at all depended on the order of the pieces in the
+  world: with the ward's piece first nothing of theirs began, with a stranger's first the exempt builder's own pieces were
+  marked as well (and unmarked again in the next pass). A base is now the pieces that share a claim (its key and the time it
+  lapses): two bases, and the same result in any order. Nothing changes where no builder is exempt: the live world with
+  the live configuration gives the same 521 lines of report as 1.29.0.
+
+### Changed
+
+- Decay: the pass over the world no longer runs in one go. The tick works through a copy of the list of objects in slices of
+  some 4 ms and gives the frame back in between (before: 20 ms a pass, 80 ms the first one after a start, on a world of
+  891,000 objects). Who is in the game is read again after the slices, before anything is judged or started. The console's
+  `decay scan`, a login that finds the status old, and the tests still run the whole pass at once. The log line of a pass
+  now says how many slices it took and how long the longest was.
+
 ## [1.29.0] - 2026-11-03
 
 ### Added

@@ -125,6 +125,28 @@ with 1.27.1, but for session ids, times and which pass a piece with a random due
 players, with the census on: 41 checks passed, and the census noted nothing (every call of the game's own). The census test
 on the same build: 14 of 14.
 
+## Decay
+
+1.29.1 (8b9fbb7b), two changes: the base is grouped by claim (key and the time it lapses), and the tick runs the pass over
+the world in slices. The decay test of the test kit (`decayrun.sh`, `[Decay] Mode = On`, `ActiveMinutes = 0`, 400 s) has
+118 checks now (110 before); 118 of 118 on a copy of the live world (7,018 pieces of players) and on the pristine copy
+with the game's own world. New in the test:
+
+- Two claims under one ward, the ward made first and made last (the builder is exempt, so his own pieces never lapse, the
+  stranger's pieces lapse): the strangers' walls are marked, the builder's ward and walls are not, one episode for each
+  ward, and two more passes change nothing. The same test on 1.29.0 (e9e7d178) fails these three checks: with one ward
+  the base began and also marked the builder's pieces (and unmarked them in the next pass), with the other nothing began.
+  (The test first used a site that an earlier step of the test had built on: the check that the site is free does not
+  count the test's own pieces. Both sites are now far from every other.)
+- The pass in slices: the pass the tick runs (slice of 1 ms, to get more than one) took 19 to 20 slices; its report is,
+  line for line, the report of the whole pass at once; the longest slice was 1.8 ms on the copy of the live world and
+  4.6 ms on the pristine one, against 50 ms and 20 ms for the whole pass at once (the work is the same, 22 and 26 ms).
+  (The test kit runs it with a slice of 1 ms; the default of 4 ms was not timed on its own.)
+
+The live configuration (`Mode = DryRun`, the defaults) on the copy of the live world, 150 s: 86 bases, 521 lines of
+dry-run report, identical to 1.29.0 line for line. (Run with a builder who is exempt, the two builds differ: that is
+the fix.) The first pass after a start is still one go (some 85 ms), as before.
+
 ## Web map
 
 1.29.0, tested on a copy of the live world (891,000 objects, 85,788 of them in the index, game 1.0.20) on server copies,

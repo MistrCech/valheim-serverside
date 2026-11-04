@@ -1,6 +1,6 @@
 # Sarkastic.gg Dedicated Simulation
 
-![version: 1.29.0](https://img.shields.io/badge/version-1.29.0-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.20](https://img.shields.io/badge/Valheim-1.0.20-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)  ![license: MIT (own code)](https://img.shields.io/badge/license-MIT%20%28own%20code%29-5b5f66?style=flat-square)
+![version: 1.29.1](https://img.shields.io/badge/version-1.29.1-3b6e8f?style=flat-square)  ![players: vanilla clients](https://img.shields.io/badge/players-vanilla%20clients-4f7a4a?style=flat-square)  ![Valheim: 1.0.20](https://img.shields.io/badge/Valheim-1.0.20-7a5c2e?style=flat-square)  ![BepInEx: 5.4.2351](https://img.shields.io/badge/BepInEx-5.4.2351-5b5f66?style=flat-square)  ![license: MIT (own code)](https://img.shields.io/badge/license-MIT%20%28own%20code%29-5b5f66?style=flat-square)
 
 [Source code](https://github.com/MistrCech/valheim-serverside)  ·  [Report a bug](https://github.com/MistrCech/valheim-serverside/issues/new)  ·  [Changelog](https://github.com/MistrCech/valheim-serverside/blob/main/CHANGELOG.md)  ·  [Resource Regrowth](https://thunderstore.io/c/valheim/p/Sarkastic_gg/Resource_Regrowth/)
 
@@ -161,7 +161,7 @@ Clients need nothing.
 | `[Decay] WorkbenchRadius` | 20 | How far, in metres sideways, a workbench protects the pieces around it. |
 | `[Decay] NoneGraceDays` / `NoneFadeDays` | 3 / 4 | The same for a piece with neither; kept by its builder. |
 | `[Decay] ActiveMinutes` | 10 | A player counts as active when they have been online this long in one go. |
-| `[Decay] ScanMinutes` | 10 | How often decay goes over what players built (some 20 ms on a world of 891,000 objects; the first pass after a start reads every object, some 80 ms) to start decay, take down what is due and update what players are told. |
+| `[Decay] ScanMinutes` | 10 | How often decay goes over what players built (some 20 ms of work on a world of 891,000 objects, 80 ms the first pass after a start, which reads every object; the tick spreads it over frames in slices of some 4 ms) to start decay, take down what is due and update what players are told. |
 | `[Decay] MaxRemovals` | 200 | Most pieces taken down in one pass. |
 | `[Decay] ExemptAdmins` | false | Admins' characters count as always active (the server learns that a character is an admin when it is online). Off by default: nobody is exempt unless named with `decay exempt`. |
 | `[Decay] LoginMessage` | true | Tell a player half a minute after they join about their bases that are decaying or will start to in three days. |
