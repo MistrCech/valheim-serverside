@@ -1,3 +1,24 @@
+## [1.30.0] - 2026-11-07
+
+### Added
+
+- More players (`[Server] MaxPlayers`, 10 by default, the game's number): how many players may be in the game at once, 1 to
+  64. The game turns away whoever comes when 10 are in ("server is full", ZNet.RPC_PeerInfo) and tells Steam's server list
+  10; both become the configured number, so a vanilla client's server list shows players / that number. A transpiler puts
+  the setting in place of the 10 of that one check, and the feature is switched off, not half applied, should the game have
+  more or fewer such checks. Crossplay (PlayFab) lobbies keep the game's limit of 10.
+- A public server with no password (`[Server] PublicWithoutPassword`, off by default): the game will not start a public
+  server (`-public 1`) without a password of at least 5 characters that is not part of the world's name or seed, and a
+  server that is not public is not listed. With this on, a public server starts with an empty password (`-password ""`)
+  and is listed with no lock. A password that is given still has to meet the game's rules. On Windows the game's player
+  leaves an empty argument out of the list it hands the game, so `-password ""` took the next argument for the password
+  (`-public`, the way AMP writes the line, which was then not read for itself) and the server came up locked with it. With
+  this on, the server reads its command line as Windows split it (CommandLineToArgvW), with its empty arguments, and only
+  when that differs from the game's list in nothing else; the log says after which flag an empty argument was kept. Both
+  are their own features, so
+  that a game update that breaks one does not take the other with it: a public server without a password that lost this
+  one would not start.
+
 ## [1.29.1] - 2026-11-04
 
 ### Fixed

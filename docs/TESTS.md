@@ -223,3 +223,52 @@ ready for `FreshEvent`, so they are "new and fresh"); the kit logs what each of 
 - W2, a config that holds the old text, as the live server's does (the title and four lines): each was shown that text as it
   is, the title in the middle and the four lines in the top left corner. A config that already has the keys is not touched by
   the new defaults.
+
+## Server access
+
+1.30.0, `[Server] MaxPlayers` and `PublicWithoutPassword`, game 1.0.20, on a copy of a test world.
+
+Startup: the server was started four times on a public port, and once the world was up the test asked it, as Steam's
+server list does (A2S_INFO), how many players it takes and whether it has a password:
+- P1, both off, `-public 1` and an empty password: the game refused to start ("Error bad password: The password is too
+  short"), as without the plugin.
+- P2, `PublicWithoutPassword = true` and `MaxPlayers = 20`, `-public 1` and an empty password: the server started, logged
+  both features ("Player limit: 20 players may be in the game at once (the game: 10)", "Public server without a password"),
+  and told the server list 20 players and no password.
+- P3, both off, `-public 1` with a valid password: 10 players and a password, which is what the question shows for the
+  game's own server (the control for P2).
+- P4, `PublicWithoutPassword = true` with the password `abc`: refused as too short, so a password that is given still has
+  to meet the game's rules.
+
+The same on the Windows build of the game, on a copy of the live server's install (its game files and BepInEx, none of
+its saves, configs or plugins), started the way AMP starts it, one argument string with `-password "" -public 1`:
+- W0, 1.30.0 before the fix, `PublicWithoutPassword = true`: the server came up, but the "Public server without a
+  password" line never came and the server list showed a password. The game's player on Windows had left out the empty
+  argument, so the game took `-public` for the password.
+- W1, with the fix, `PublicWithoutPassword = true` and `MaxPlayers = 20`: "Command line: read as Windows split it ...
+  after -password", "Public server without a password", and the server list showed 20 players and no password.
+- W2, only `MaxPlayers = 20`: 20 players and a password, as the game itself does on Windows (the control for W1).
+- W3, `PublicWithoutPassword = true` with the password `selftest123`: a password, and no "Command line" line, so with no
+  empty argument the game's own list is read.
+- P2 again on Linux with the fixed build: 20 players and no password, and no "Command line" line (elsewhere than on Windows
+  the game's own list is read).
+
+Joining: the test kit put N simulated players in the game, ran the game's own count of players, and then sent one more
+connection through the game's own `ZNet.RPC_PeerInfo` with the information a client sends (its id, version, name, the
+hash of the right password). Refused means the game sent error 9 and logged "server is full", and the connection got no
+name; let in means no error and the connection holding its id and name, one more player counted. The connection was
+removed afterwards. All 26 checks of the four runs passed:
+
+| | MaxPlayers | players in | the next one |
+|---|---|---|---|
+| A | (not set: the game's 10) | 10 | refused |
+| B | (not set) | 9 | let in |
+| C | 20 | 10 | let in |
+| D | 20 | 20 | refused |
+
+A and B are the game's own limit with the plugin in place, and C, with the same 10 players as A, lets in the one that A
+turns away. The client's side of the server list was read in the game's code: it shows the count and the limit the server
+reports and does not keep anyone from joining.
+
+With the defaults neither feature patches anything (P1, A and B: no "Player limit" line), so the other tests were not run
+again for this build. The joining runs were made before the Windows fix, which changes only `PublicWithoutPassword`.

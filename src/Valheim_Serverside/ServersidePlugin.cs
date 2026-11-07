@@ -23,7 +23,7 @@ namespace Valheim_Serverside
 		// detect it by GUID still do and the two cannot be loaded side by side.
 		public const string PluginGUID = "MVP.Valheim_Serverside_Simulations";
 		public const string PluginName = "Sarkastic.gg Dedicated Simulation";
-		public const string PluginVersion = "1.29.1";
+		public const string PluginVersion = "1.30.0";
 
 		private static ServersidePlugin context;
 		public static ServersidePlugin instance => context;
@@ -91,6 +91,8 @@ namespace Valheim_Serverside
 			availableFeatures.AddFeature(new Features.AntiCheat());
 			availableFeatures.AddFeature(new Features.RpcCensus());
 			availableFeatures.AddFeature(new Features.WebMap());
+			availableFeatures.AddFeature(new Features.PlayerLimit());
+			availableFeatures.AddFeature(new Features.PublicWithoutPassword());
 
 			PatchRequirements patchRequirements = new PatchRequirements();
 			patchRequirements.AddRequirement(new PatchRequirement.DebugBuild());

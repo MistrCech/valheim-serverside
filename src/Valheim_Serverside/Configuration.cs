@@ -19,6 +19,8 @@ namespace PluginConfiguration
 		public static ConfigEntry<int> unityJobWorkers;
 		public static ConfigEntry<string> cpuAffinity;
 		public static ConfigEntry<string> processPriority;
+		public static ConfigEntry<int> maxPlayers;
+		public static ConfigEntry<bool> publicWithoutPassword;
 		public static ConfigEntry<int> messageLineLength;
 		public static ConfigEntry<float> messageSecondsPerLine;
 
@@ -230,6 +232,11 @@ namespace PluginConfiguration
 			processPriority = config.Bind<string>("Server", "ProcessPriority", "Normal",
 				new ConfigDescription("Priority of the server process against everything else on the host: Normal (as before), AboveNormal or High. When the host is busy, a higher priority lets the server's frames go first. Needs a restart.",
 					new AcceptableValueList<string>("Normal", "AboveNormal", "High")));
+			maxPlayers = config.Bind<int>("Server", "MaxPlayers", 10,
+				new ConfigDescription("How many players may be in the game at once. The game: 10 -- the next one is told the server is full -- and Steam's server list says so. Only the server counts, so clients stay vanilla; more players means more for the server to simulate and send. Crossplay (PlayFab) lobbies keep the game's 10. Needs a restart.",
+					new AcceptableValueRange<int>(1, 64)));
+			publicWithoutPassword = config.Bind<bool>("Server", "PublicWithoutPassword", false,
+				"Let a public server (-public 1) start with an empty password (-password \"\"): it is listed with no lock and anyone may join. The game will not start a public server without a password of at least 5 characters (a server that is not public may have none). A password that is given still has to meet the game's rules. Needs a restart.");
 
 			sendIntervalMs = config.Bind<int>("Performance", "SendIntervalMs", 100,
 				new ConfigDescription("How often each player is sent world updates, in real milliseconds. Valheim sends to one player per frame, so each player waits players+1 frames: at 15 FPS with 4 players ~330 ms. Every send builds that player's list of nearby objects, so shorter intervals cost server CPU. 0 keeps Valheim's behaviour.",
