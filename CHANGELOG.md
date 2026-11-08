@@ -3,12 +3,21 @@
 ### Added
 
 - `[WardGuard] OutsideWards` (Off by default) and `OutsideWardsMessage`: builds are protected where no ward is, too. Where no
-  enabled ward covers the place, hitting a player's build or taking it down with the hammer is refused to anyone but its builder,
-  the players on the list of one of the builder's wards (switched on or not: the people the builder lets into their base) and
-  admins. Repairing stays open to everyone; a hit with no attacker (fire, a falling object) or by a creature the sender's game
-  owns is let through, as under `Structures`; a piece with no creator (placed by the world itself) stays open. Where a ward is,
-  its list decides as before. A refusal is written to the guard log with the builder's name and player id, at most one line a
+  enabled ward covers the place, hitting a player's build, taking it down with the hammer and the uses `Interactions` covers
+  (opening a chest or a door, a stand, taking from a smelter, kiln or cooking station, switching a fire off, claiming a bed, picking
+  a crop) are refused to anyone but its builder, the players on the list of one of the builder's wards (switched on or not: the
+  people the builder lets into their base) and admins. A ward the builder may not act in gives no rights over their build either:
+  a ward put up beside someone's base does not let its owner take it apart, nor take a non-member's pieces down inside their own
+  ward (the builder or an admin can). Repairing and putting things in stay open to everyone; a hit with no attacker (fire, a falling object) or by a creature the sender's game
+  owns is let through, as under `Structures`; a piece with no creator (placed by the world itself) stays open. Where the
+  builder's own ward is, its list decides as before. A refusal is written to the guard log with the builder's name and player id, at most one line a
   minute per player and builder.
+- A grown crop carries its planter (that of the sapling it grew from), so `OutsideWards` keeps it for them; crops planted before
+  this version have none and stay open.
+- `[WardGuard] OwnPieces` (false by default): a player may always hit, take down, repair and use what they built, also inside a
+  ward they are not on.
+- `[WardGuard] Tombstones` (Off by default) and `TombstonesMessage`: a tombstone opens, and gives up what is in it, only to the dead
+  player, the players on the list of one of their wards and admins.
 
 ### Changed
 

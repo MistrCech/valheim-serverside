@@ -38,10 +38,17 @@ namespace Valheim_Serverside.Features
 		  (fire, a falling object) or one by a creature that the sender's game owns (a raid, a monster they
 		  lured) is not a player's and is not touched: monsters still do what they do in the game. The ward
 		  flashes, as it does for a hit, and the player is told.
-		- Outside wards (OutsideWards, Off by default): where no enabled ward covers the place, RPC_Damage and RPC_Remove
-		  on a player's build are dropped unless the sender built it, is on the list of one of the builder's wards
-		  (switched on or not: the people the builder lets into their base) or is an admin. Repairing stays open, and
-		  the same hits as above (no attacker, a creature) are let through. The ward's list still wins where a ward is.
+		- Outside wards (OutsideWards, Off by default): a player's build that no ward of the builder's own people covers --
+		  no enabled ward there, or only wards whose list does not have the builder on it -- is the builder's: RPC_Damage,
+		  RPC_Remove and the interactions below are dropped unless the sender built it, is on the list of one of the
+		  builder's wards (switched on or not: the people the builder lets into their base) or is an admin. A ward put up
+		  beside someone's build therefore gives its owner nothing over it. Repairing and putting things in stay open, and
+		  the same hits as above (no attacker, a creature) are let through. Where the builder's own ward covers the build,
+		  that ward's list decides. A crop has no builder in the game (Plant.Grow makes it a new object): the sapling's
+		  creator is written into it as it grows (s_planter), so a crop is its planter's.
+		- Own pieces (OwnPieces, off by default): the builder may always act on their piece, inside anyone's ward too.
+		- Tombstones (Tombstones, Off by default): opening a tombstone or taking from it (RPC_RequestOpen, RPC_RequestStack,
+		  RPC_RequestTakeAll) is for the player who died, the players on the list of one of their wards and admins, anywhere.
 		- Interactions: what the game's own client checks refuse (chests with the guard stone flag, doors, item and armour
 		  stands, fermenters, beehives, sap collectors, incinerators, the map table's writing) is refused by the server
 		  too, and what has no check: taking the product out of a smelter or a cooking station, switching a fireplace
@@ -59,7 +66,7 @@ namespace Valheim_Serverside.Features
 		  (the default) counts them and writes a summary to the log; On takes them out of the request. Leave it in
 		  LogOnly until the log shows what the honest clients do.
 
-		Not covered here: ground items, tombstones (anyone may open), ships and carts as vehicles (hitting them is covered
+		Not covered here: ground items, tombstones unless Tombstones is on (in the game anyone may open them), ships and carts as vehicles (hitting them is covered
 		as a piece), the sign's text (written straight into its ZDO by the player's game), terrain, fire and
 		falling or colliding objects (a hit with no attacker is not a player's own and is let through), an object
 		whose ownership a player's game takes without asking its owner (a boss trophy used on a turret) and then
@@ -93,6 +100,23 @@ namespace Valheim_Serverside.Features
 		// A request for a chest, and what the chest answers when it says no.
 		private static readonly Dictionary<int, string> s_answer = new Dictionary<int, string>();
 		private static readonly Dictionary<int, string> s_names = new Dictionary<int, string>();
+		// Tombstones (TombStone) and the container requests that open one or take from it.
+		private static readonly HashSet<int> s_tombstones = new HashSet<int>();
+		private static readonly HashSet<int> s_tombRequests = new HashSet<int> { "RPC_RequestOpen".GetStableHashCode(), "RPC_RequestStack".GetStableHashCode(), "RPC_RequestTakeAll".GetStableHashCode() };
+		/*
+			Who planted a crop. The game grows a crop as a new object where the sapling stood and destroys the sapling (Plant.Grow), and
+			the crop has no builder: the planter (the sapling's creator) is written into the crop under this key. Whichever game grew it,
+			the server sees the crop being made and the sapling taken away a moment apart, in either order; each waits a minute for the
+			other. Crops that grew before this came in carry nobody.
+		*/
+		internal static readonly int s_planter = "SarkasticGG_planter".GetStableHashCode();
+		// sapling prefab -> how far from it its crop may stand (a plant that grows against something: its attach distance)
+		private static readonly Dictionary<int, float> s_saplings = new Dictionary<int, float>();
+		private static readonly HashSet<int> s_crops = new HashSet<int>();
+		private struct Pending { public ZDOID id; public Vector3 at; public long planter; public float reach; public float time; }
+		private static readonly List<Pending> s_goneSaplings = new List<Pending>();
+		private static readonly List<Pending> s_newCrops = new List<Pending>();
+		private static int s_cropErrors;
 		private static int s_errors;
 		private static readonly List<int> s_permittedKeys = new List<int>();
 		private static readonly Dictionary<string, float> s_rate = new Dictionary<string, float>();
@@ -181,8 +205,14 @@ namespace Valheim_Serverside.Features
 						if (grown && grown.GetComponent<Pickable>())
 						{
 							Gate(grown.name.GetStableHashCode(), "RPC_Pick");
+							s_crops.Add(grown.name.GetStableHashCode());
+							s_saplings[hash] = Mathf.Max(0.3f, plant.m_attachDistance + 0.5f);
 						}
 					}
+				}
+				if (prefab.GetComponent<TombStone>())
+				{
+					s_tombstones.Add(hash);
 				}
 				if (!prefab.GetComponent<Piece>())
 				{
@@ -204,8 +234,13 @@ namespace Valheim_Serverside.Features
 			s_answer["RPC_RequestOpen".GetStableHashCode()] = "RPC_OpenResponse";
 			s_answer["RPC_RequestStack".GetStableHashCode()] = "RPC_StackResponse";
 			s_answer["RPC_RequestTakeAll".GetStableHashCode()] = "RPC_TakeAllResponse";
+			WorldIndex.OnMade -= CropMade;
+			WorldIndex.OnMade += CropMade;
+			WorldIndex.OnGone -= SaplingGone;
+			WorldIndex.OnGone += SaplingGone;
 			s_wardRadius = wards;
-			ServersidePlugin.logger.LogInfo($"Ward guard: structures {Configuration.wardGuardStructures.Value}, outside wards {Configuration.wardGuardOutsideWards.Value}, interactions {Configuration.wardGuardInteractions.Value}, "
+			ServersidePlugin.logger.LogInfo($"Ward guard: structures {Configuration.wardGuardStructures.Value}, outside wards {Configuration.wardGuardOutsideWards.Value}, own pieces {Configuration.wardGuardOwnPieces.Value}, "
+				+ $"tombstones {Configuration.wardGuardTombstones.Value} ({s_tombstones.Count} prefab(s)), crops of {s_saplings.Count} sapling(s) carry their planter, interactions {Configuration.wardGuardInteractions.Value}, "
 				+ $"spoofing {Configuration.wardGuardSpoofing.Value}, destroy requests {Configuration.wardGuardDestroyRequests.Value}. "
 				+ $"Wards: {string.Join(", ", wards.Select(kv => ZNetScene.instance.GetPrefab(kv.Key).name + " " + kv.Value.ToString("0.#") + " m"))}; "
 				+ $"{s_gate.Count} kinds of request on {s_gate.Values.SelectMany(s => s).Distinct().Count()} prefab(s) ({guarded} component(s)) are held to the ward's list.");
@@ -309,6 +344,142 @@ namespace Valheim_Serverside.Features
 				}
 			}
 			return false;
+		}
+
+		// Where OutsideWards rules: the builder and the people on the list of one of the builder's wards.
+		private static bool BuildersSide(long builder, long player)
+		{
+			return player != 0L && (player == builder || FriendOf(builder, player));
+		}
+
+		// OutsideWards: is this build left to its builder? Yes where no enabled ward covers it, and where only wards cover it whose
+		// list does not have the builder on it (someone else's ward beside it). covering: then the first such ward.
+		private static bool BuildersOwn(Vector3 at, long builder, out ZDO covering)
+		{
+			bool mine = Allowed(at, builder, out ZDO notTheirs, out bool covered);
+			covering = mine ? null : notTheirs;
+			return !covered || !mine;
+		}
+
+		// The builder of a build: its creator, or for a crop the one who planted it.
+		private static long Builder(ZDO zdo)
+		{
+			long creator = zdo.GetLong(ZDOVars.s_creator, 0L);
+			return creator != 0L ? creator : zdo.GetLong(s_planter, 0L);
+		}
+
+		// A request refused: a chest's question gets its no, the rest is dropped.
+		private static bool Refuse(ZNetPeer peer, Header h)
+		{
+			if (s_answer.TryGetValue(h.method, out string answer))
+			{
+				ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, h.zdo, answer, false);
+			}
+			return false;
+		}
+
+		private static void Prune(List<Pending> list, float now)
+		{
+			list.RemoveAll(p => now - p.time > 60f || now < p.time);
+			if (list.Count > 2000)
+			{
+				list.RemoveRange(0, list.Count - 2000);
+			}
+		}
+
+		// A crop made (or updated) without a planter: the sapling it grew from may be gone already, else it is waited for.
+		private static void CropMade(ZDO zdo, int prefab)
+		{
+			try
+			{
+				if (!s_crops.Contains(prefab) || zdo.GetLong(s_planter, 0L) != 0L)
+				{
+					return;
+				}
+				float now = Time.time;
+				Prune(s_goneSaplings, now);
+				Vector3 at = zdo.GetPosition();
+				int best = -1;
+				float bestD = float.MaxValue;
+				for (int i = 0; i < s_goneSaplings.Count; i++)
+				{
+					float d = (s_goneSaplings[i].at - at).sqrMagnitude;
+					if (d <= s_goneSaplings[i].reach * s_goneSaplings[i].reach && d < bestD)
+					{
+						best = i;
+						bestD = d;
+					}
+				}
+				if (best >= 0)
+				{
+					zdo.Set(s_planter, s_goneSaplings[best].planter);
+					s_goneSaplings.RemoveAt(best);
+					return;
+				}
+				Prune(s_newCrops, now);
+				if (!s_newCrops.Exists(p => p.id == zdo.m_uid))
+				{
+					s_newCrops.Add(new Pending { id = zdo.m_uid, at = at, time = now });
+				}
+			}
+			catch (Exception e)
+			{
+				if (s_cropErrors++ < 5)
+				{
+					ServersidePlugin.logger.LogWarning($"Ward guard: crop planter: {e.Message}");
+				}
+			}
+		}
+
+		// A sapling taken away (inside the game's HandleDestroyedZDO: never throws): the crop it grew into, made a moment ago, gets its
+		// planter; else the planter waits a minute for the crop.
+		private static void SaplingGone(ZDO zdo)
+		{
+			try
+			{
+				if (!s_saplings.TryGetValue(zdo.GetPrefab(), out float reach))
+				{
+					return;
+				}
+				long planter = zdo.GetLong(ZDOVars.s_creator, 0L);
+				if (planter == 0L)
+				{
+					return;
+				}
+				float now = Time.time;
+				Prune(s_newCrops, now);
+				Vector3 at = zdo.GetPosition();
+				int best = -1;
+				float bestD = float.MaxValue;
+				for (int i = 0; i < s_newCrops.Count; i++)
+				{
+					float d = (s_newCrops[i].at - at).sqrMagnitude;
+					if (d <= reach * reach && d < bestD)
+					{
+						best = i;
+						bestD = d;
+					}
+				}
+				if (best >= 0)
+				{
+					ZDO crop = ZDOMan.instance.GetZDO(s_newCrops[best].id);
+					s_newCrops.RemoveAt(best);
+					if (crop != null && crop.GetLong(s_planter, 0L) == 0L)
+					{
+						crop.Set(s_planter, planter);
+						return;
+					}
+				}
+				Prune(s_goneSaplings, now);
+				s_goneSaplings.Add(new Pending { at = at, planter = planter, reach = reach, time = now });
+			}
+			catch (Exception e)
+			{
+				if (s_cropErrors++ < 5)
+				{
+					ServersidePlugin.logger.LogWarning($"Ward guard: crop planter: {e.Message}");
+				}
+			}
 		}
 
 		// A player's name for the guard log: from their connection while they are online, else from a ward they built.
@@ -505,21 +676,25 @@ namespace Valheim_Serverside.Features
 					return true;
 				}
 				long player = PlayerId(peer);
-				if (Allowed(target.GetPosition(), player, out ZDO denying, out bool covered))
+				if (player != 0L && player == builder && Configuration.wardGuardOwnPieces.Value)
 				{
-					// Where no enabled ward is (OutsideWards): only the builder and the players on one of the builder's wards' lists.
-					if (covered || outside == Mode.Off || h.method == s_repair || builder == 0L || (player != 0L && (player == builder || FriendOf(builder, player))))
-					{
-						return true;
-					}
+					return true;
+				}
+				Vector3 at = target.GetPosition();
+				// OutsideWards: a build no ward of its builder's people covers is the builder's and their friends' (a ward of others beside it gives nothing).
+				if (outside != Mode.Off && builder != 0L && h.method != s_repair && !BuildersSide(builder, player) && BuildersOwn(at, builder, out ZDO beside))
+				{
 					if (h.method == s_damage && NotAPlayersHit(peer, pkg))
 					{
 						return true;
 					}
-					Report(peer, target, null, "build", h.method == s_damage ? "hit" : "take down", outside == Mode.On, builder);
-					return outside != Mode.On;
+					Report(peer, target, null, "build", h.method == s_damage ? "hit" : "take down", outside == Mode.On, builder, beside);
+					if (outside == Mode.On)
+					{
+						return false;
+					}
 				}
-				if (structures == Mode.Off)
+				if (structures == Mode.Off || Allowed(at, player, out ZDO denying))
 				{
 					return true;
 				}
@@ -531,22 +706,47 @@ namespace Valheim_Serverside.Features
 				Report(peer, target, denying, "structure", what, structures == Mode.On);
 				return structures != Mode.On;
 			}
-			Mode interactions = Configuration.wardGuardInteractions.Value;
-			if (interactions != Mode.Off && s_gate.TryGetValue(h.method, out HashSet<int> prefabs) && prefabs.Contains(prefab) && !IsAdmin(peer))
+			if (s_tombstones.Contains(prefab) && s_tombRequests.Contains(h.method))
 			{
-				if (Allowed(target.GetPosition(), PlayerId(peer), out ZDO denying))
+				// Tombstones: the player who died and their friends, anywhere; no ward plays a part.
+				Mode tombs = Configuration.wardGuardTombstones.Value;
+				long dead = target.GetLong(ZDOVars.s_owner, 0L);
+				if (tombs == Mode.Off || dead == 0L || IsAdmin(peer) || BuildersSide(dead, PlayerId(peer)))
+				{
+					return true;
+				}
+				Report(peer, target, null, "tombstone", s_names.TryGetValue(h.method, out string verb) ? verb : "open", tombs == Mode.On, dead);
+				return tombs == Mode.On ? Refuse(peer, h) : true;
+			}
+			if (s_gate.TryGetValue(h.method, out HashSet<int> prefabs) && prefabs.Contains(prefab))
+			{
+				Mode interactions = Configuration.wardGuardInteractions.Value;
+				Mode outside = Configuration.wardGuardOutsideWards.Value;
+				if ((interactions == Mode.Off && outside == Mode.Off) || IsAdmin(peer))
+				{
+					return true;
+				}
+				long player = PlayerId(peer);
+				long builder = Builder(target);
+				if (player != 0L && player == builder && Configuration.wardGuardOwnPieces.Value)
+				{
+					return true;
+				}
+				Vector3 at = target.GetPosition();
+				if (outside != Mode.Off && builder != 0L && !BuildersSide(builder, player) && BuildersOwn(at, builder, out ZDO beside))
+				{
+					Report(peer, target, null, "use", s_names[h.method], outside == Mode.On, builder, beside);
+					if (outside == Mode.On)
+					{
+						return Refuse(peer, h);
+					}
+				}
+				if (interactions == Mode.Off || Allowed(at, player, out ZDO denying))
 				{
 					return true;
 				}
 				Report(peer, target, denying, "interaction", s_names[h.method], interactions == Mode.On);
-				if (interactions == Mode.On)
-				{
-					if (s_answer.TryGetValue(h.method, out string answer))
-					{
-						ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, h.zdo, answer, false);
-					}
-					return false;
-				}
+				return interactions == Mode.On ? Refuse(peer, h) : true;
 			}
 			return true;
 		}
@@ -876,10 +1076,11 @@ namespace Valheim_Serverside.Features
 			One refusal: written to <world>.guard.log (once a minute per player, kind and ward, with how many there were since the last line),
 			and with `enforced` the ward flashes and the player is told (the message at most every 15 s, the flash every 3 s).
 		*/
-		private static void Report(ZNetPeer peer, ZDO target, ZDO ward, string kind, string what, bool enforced, long builder = 0L)
+		private static void Report(ZNetPeer peer, ZDO target, ZDO ward, string kind, string what, bool enforced, long builder = 0L, ZDO beside = null)
 		{
-			// one line a minute per player and ward; outside wards per player and builder, so a run along a wall is one line
-			string key = kind == "build" ? $"{peer.m_uid}/build/{builder}"
+			// one line a minute per player and ward; a builder's builds and a tombstone per player and builder, so a run along a wall is one line
+			bool byBuilder = kind == "build" || kind == "use" || kind == "tombstone";
+			string key = byBuilder ? $"{peer.m_uid}/{kind}/{builder}"
 				: $"{peer.m_uid}/{kind}/{(ward != null ? ward.m_uid.ToString() : target != null ? target.m_uid.ToString() : "-")}";
 			if (s_counts.Count > 4000)
 			{
@@ -892,7 +1093,9 @@ namespace Valheim_Serverside.Features
 				s_counts[key] = 0;
 				string who = $"{Clean(peer.m_playerName)} ({PlayerId(peer)})";
 				string owner = ward != null ? $"; ward of {Clean(ward.GetString(ZDOVars.s_creatorName, "?"))} at {Where(ward)}"
-					: kind == "build" ? $"; built by {PlayerName(builder)} ({builder}), no ward there" : "";
+					: kind == "tombstone" ? $"; tombstone of {Clean(target.GetString(ZDOVars.s_ownerName, "?"))} ({builder})"
+					: byBuilder ? $"; built by {PlayerName(builder)} ({builder}), " + (beside != null ? $"in the ward of {Clean(beside.GetString(ZDOVars.s_creatorName, "?"))} at {Where(beside)}, whose list does not have them" : "no ward there")
+					: "";
 				string outcome = enforced ? (kind == "spoofing" ? "dropped" : "refused") : "LogOnly: let through";
 				string line;
 				if (target == null)
@@ -918,7 +1121,8 @@ namespace Valheim_Serverside.Features
 			{
 				ZRoutedRpc.instance.InvokeRoutedRPC(ZRoutedRpc.Everybody, ward.m_uid, "FlashShield");
 			}
-			string message = kind == "build" ? Configuration.wardGuardOutsideWardsMessage.Value : Configuration.wardGuardMessage.Value;
+			string message = kind == "tombstone" ? Configuration.wardGuardTombstonesMessage.Value
+				: byBuilder ? Configuration.wardGuardOutsideWardsMessage.Value : Configuration.wardGuardMessage.Value;
 			if (!string.IsNullOrEmpty(message) && Rate("say/" + peer.m_uid, 15f))
 			{
 				PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, message);

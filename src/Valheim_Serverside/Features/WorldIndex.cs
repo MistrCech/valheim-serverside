@@ -241,7 +241,14 @@ namespace Valheim_Serverside.Features
 				return;
 			}
 			Add(s_sets, KindsOf(prefab), zdo.m_uid, true);
+			OnMade?.Invoke(zdo, prefab);
 		}
+
+		// For other features that follow objects as they are made and taken away (the ward guard: who planted a crop). Made is called
+		// from the game's AddIfPortal (also with every later update of an object a player's game sends), Gone inside HandleDestroyedZDO:
+		// a handler must not throw.
+		internal static event Action<ZDO, int> OnMade;
+		internal static event Action<ZDO> OnGone;
 
 		// Called by the game inside HandleDestroyedZDO: an exception here would stop the game removing the object.
 		private static void OnDestroyed(ZDO zdo)
@@ -260,6 +267,7 @@ namespace Valheim_Serverside.Features
 						s_dirty[k] = true;
 					}
 				}
+				OnGone?.Invoke(zdo);
 			}
 			catch (Exception e)
 			{
