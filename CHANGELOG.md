@@ -1,3 +1,20 @@
+## [1.31.0] - 2026-11-08
+
+### Added
+
+- `[WardGuard] OutsideWards` (Off by default) and `OutsideWardsMessage`: builds are protected where no ward is, too. Where no
+  enabled ward covers the place, hitting a player's build or taking it down with the hammer is refused to anyone but its builder,
+  the players on the list of one of the builder's wards (switched on or not: the people the builder lets into their base) and
+  admins. Repairing stays open to everyone; a hit with no attacker (fire, a falling object) or by a creature the sender's game
+  owns is let through, as under `Structures`; a piece with no creator (placed by the world itself) stays open. Where a ward is,
+  its list decides as before. A refusal is written to the guard log with the builder's name and player id, at most one line a
+  minute per player and builder.
+
+### Changed
+
+- The ward guard's README section moved to [docs/WARDGUARD.md](docs/WARDGUARD.md); the README keeps a summary (Thunderstore's
+  README limit).
+
 ## [1.30.1] - 2026-11-08
 
 ### Changed

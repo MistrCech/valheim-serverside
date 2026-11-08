@@ -38,6 +38,10 @@ namespace Valheim_Serverside.Features
 		  (fire, a falling object) or one by a creature that the sender's game owns (a raid, a monster they
 		  lured) is not a player's and is not touched: monsters still do what they do in the game. The ward
 		  flashes, as it does for a hit, and the player is told.
+		- Outside wards (OutsideWards, Off by default): where no enabled ward covers the place, RPC_Damage and RPC_Remove
+		  on a player's build are dropped unless the sender built it, is on the list of one of the builder's wards
+		  (switched on or not: the people the builder lets into their base) or is an admin. Repairing stays open, and
+		  the same hits as above (no attacker, a creature) are let through. The ward's list still wins where a ward is.
 		- Interactions: what the game's own client checks refuse (chests with the guard stone flag, doors, item and armour
 		  stands, fermenters, beehives, sap collectors, incinerators, the map table's writing) is refused by the server
 		  too, and what has no check: taking the product out of a smelter or a cooking station, switching a fireplace
@@ -201,7 +205,7 @@ namespace Valheim_Serverside.Features
 			s_answer["RPC_RequestStack".GetStableHashCode()] = "RPC_StackResponse";
 			s_answer["RPC_RequestTakeAll".GetStableHashCode()] = "RPC_TakeAllResponse";
 			s_wardRadius = wards;
-			ServersidePlugin.logger.LogInfo($"Ward guard: structures {Configuration.wardGuardStructures.Value}, interactions {Configuration.wardGuardInteractions.Value}, "
+			ServersidePlugin.logger.LogInfo($"Ward guard: structures {Configuration.wardGuardStructures.Value}, outside wards {Configuration.wardGuardOutsideWards.Value}, interactions {Configuration.wardGuardInteractions.Value}, "
 				+ $"spoofing {Configuration.wardGuardSpoofing.Value}, destroy requests {Configuration.wardGuardDestroyRequests.Value}. "
 				+ $"Wards: {string.Join(", ", wards.Select(kv => ZNetScene.instance.GetPrefab(kv.Key).name + " " + kv.Value.ToString("0.#") + " m"))}; "
 				+ $"{s_gate.Count} kinds of request on {s_gate.Values.SelectMany(s => s).Distinct().Count()} prefab(s) ({guarded} component(s)) are held to the ward's list.");
@@ -257,7 +261,14 @@ namespace Valheim_Serverside.Features
 		*/
 		private static bool Allowed(Vector3 at, long player, out ZDO denying)
 		{
+			return Allowed(at, player, out denying, out _);
+		}
+
+		// covered: an enabled ward covers the place (allowed then means the player is on the list of one of them).
+		private static bool Allowed(Vector3 at, long player, out ZDO denying, out bool covered)
+		{
 			denying = null;
+			covered = false;
 			foreach (ZDOID id in WorldIndex.Wards)
 			{
 				ZDO ward = ZDOMan.instance.GetZDO(id);
@@ -272,6 +283,7 @@ namespace Valheim_Serverside.Features
 				{
 					continue;
 				}
+				covered = true;
 				if (player != 0L && OnList(ward, player))
 				{
 					denying = null;
@@ -283,6 +295,42 @@ namespace Valheim_Serverside.Features
 				}
 			}
 			return denying == null;
+		}
+
+		// On the list of one of the builder's wards, switched on or not: the people the builder lets into their base.
+		private static bool FriendOf(long builder, long player)
+		{
+			foreach (ZDOID id in WorldIndex.Wards)
+			{
+				ZDO ward = ZDOMan.instance.GetZDO(id);
+				if (ward != null && s_wardRadius.ContainsKey(ward.GetPrefab()) && ward.GetLong(ZDOVars.s_creator, 0L) == builder && OnList(ward, player))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		// A player's name for the guard log: from their connection while they are online, else from a ward they built.
+		private static string PlayerName(long player)
+		{
+			foreach (ZNetPeer peer in ZNet.instance.GetPeers())
+			{
+				if (PlayerId(peer) == player)
+				{
+					return Clean(peer.m_playerName);
+				}
+			}
+			foreach (ZDOID id in WorldIndex.Wards)
+			{
+				ZDO ward = ZDOMan.instance.GetZDO(id);
+				string name = ward != null && ward.GetLong(ZDOVars.s_creator, 0L) == player ? ward.GetString(ZDOVars.s_creatorName, "") : "";
+				if (name.Length > 0)
+				{
+					return Clean(name);
+				}
+			}
+			return "?";
 		}
 
 		// For the anti-cheat: may this player build at this place by the ward rule? True where no ward is known to say otherwise (the wards
@@ -450,11 +498,28 @@ namespace Valheim_Serverside.Features
 			if (h.method == s_damage || h.method == s_remove || h.method == s_repair)
 			{
 				Mode structures = Configuration.wardGuardStructures.Value;
-				if (structures == Mode.Off || (target.GetLong(ZDOVars.s_creator, 0L) == 0L && !s_wardRadius.ContainsKey(prefab)) || IsAdmin(peer))
+				Mode outside = Configuration.wardGuardOutsideWards.Value;
+				long builder = target.GetLong(ZDOVars.s_creator, 0L);
+				if ((structures == Mode.Off && outside == Mode.Off) || (builder == 0L && !s_wardRadius.ContainsKey(prefab)) || IsAdmin(peer))
 				{
 					return true;
 				}
-				if (Allowed(target.GetPosition(), PlayerId(peer), out ZDO denying))
+				long player = PlayerId(peer);
+				if (Allowed(target.GetPosition(), player, out ZDO denying, out bool covered))
+				{
+					// Where no enabled ward is (OutsideWards): only the builder and the players on one of the builder's wards' lists.
+					if (covered || outside == Mode.Off || h.method == s_repair || builder == 0L || (player != 0L && (player == builder || FriendOf(builder, player))))
+					{
+						return true;
+					}
+					if (h.method == s_damage && NotAPlayersHit(peer, pkg))
+					{
+						return true;
+					}
+					Report(peer, target, null, "build", h.method == s_damage ? "hit" : "take down", outside == Mode.On, builder);
+					return outside != Mode.On;
+				}
+				if (structures == Mode.Off)
 				{
 					return true;
 				}
@@ -811,9 +876,11 @@ namespace Valheim_Serverside.Features
 			One refusal: written to <world>.guard.log (once a minute per player, kind and ward, with how many there were since the last line),
 			and with `enforced` the ward flashes and the player is told (the message at most every 15 s, the flash every 3 s).
 		*/
-		private static void Report(ZNetPeer peer, ZDO target, ZDO ward, string kind, string what, bool enforced)
+		private static void Report(ZNetPeer peer, ZDO target, ZDO ward, string kind, string what, bool enforced, long builder = 0L)
 		{
-			string key = $"{peer.m_uid}/{kind}/{(ward != null ? ward.m_uid.ToString() : target != null ? target.m_uid.ToString() : "-")}";
+			// one line a minute per player and ward; outside wards per player and builder, so a run along a wall is one line
+			string key = kind == "build" ? $"{peer.m_uid}/build/{builder}"
+				: $"{peer.m_uid}/{kind}/{(ward != null ? ward.m_uid.ToString() : target != null ? target.m_uid.ToString() : "-")}";
 			if (s_counts.Count > 4000)
 			{
 				s_counts.Clear();
@@ -824,7 +891,8 @@ namespace Valheim_Serverside.Features
 			{
 				s_counts[key] = 0;
 				string who = $"{Clean(peer.m_playerName)} ({PlayerId(peer)})";
-				string owner = ward != null ? $"; ward of {Clean(ward.GetString(ZDOVars.s_creatorName, "?"))} at {Where(ward)}" : "";
+				string owner = ward != null ? $"; ward of {Clean(ward.GetString(ZDOVars.s_creatorName, "?"))} at {Where(ward)}"
+					: kind == "build" ? $"; built by {PlayerName(builder)} ({builder}), no ward there" : "";
 				string outcome = enforced ? (kind == "spoofing" ? "dropped" : "refused") : "LogOnly: let through";
 				string line;
 				if (target == null)
@@ -850,7 +918,7 @@ namespace Valheim_Serverside.Features
 			{
 				ZRoutedRpc.instance.InvokeRoutedRPC(ZRoutedRpc.Everybody, ward.m_uid, "FlashShield");
 			}
-			string message = Configuration.wardGuardMessage.Value;
+			string message = kind == "build" ? Configuration.wardGuardOutsideWardsMessage.Value : Configuration.wardGuardMessage.Value;
 			if (!string.IsNullOrEmpty(message) && Rate("say/" + peer.m_uid, 15f))
 			{
 				PlayerMessages.Show(peer.m_uid, MessageHud.MessageType.Center, message);

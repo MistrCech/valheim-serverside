@@ -82,6 +82,8 @@ namespace PluginConfiguration
 		public static ConfigEntry<bool> wardGuardExemptAdmins;
 		public static ConfigEntry<bool> wardGuardFlash;
 		public static ConfigEntry<string> wardGuardMessage;
+		public static ConfigEntry<Valheim_Serverside.Features.WardGuard.Mode> wardGuardOutsideWards;
+		public static ConfigEntry<string> wardGuardOutsideWardsMessage;
 		public static ConfigEntry<int> wardGuardMaxActiveWards;
 		public static ConfigEntry<string> wardGuardMaxActiveWardsMessage;
 
@@ -354,6 +356,10 @@ namespace PluginConfiguration
 				"The ward flashes (the game's own shield effect, every player near sees it) when it refuses something, at most every 3 seconds.");
 			wardGuardMessage = config.Bind<string>("WardGuard", "Message", "This place is under a ward. Ask its owner to put you on the ward's list.",
 				"Shown in the middle of the screen of a player the ward refused, at most every 15 seconds. Empty: no message.");
+			wardGuardOutsideWards = config.Bind("WardGuard", "OutsideWards", Valheim_Serverside.Features.WardGuard.Mode.Off,
+				"Where no enabled ward covers the place: hitting a player's build piece (anything with a creator, and a ward that is switched off) or taking it down with the hammer, by anyone but the player who built it, the players on the list of one of that player's wards (switched on or not) and admins (ExemptAdmins). On drops it (the player is told), LogOnly only writes it to the guard log, Off leaves it to the game, where anyone may. Repairing stays open to everyone, and a hit with no attacker (fire, a falling object) or by a creature that the sender's game owns is let through, as under Structures. Inside an enabled ward Structures decides, by the ward's list. For a server where nobody should break what others built, ward or not.");
+			wardGuardOutsideWardsMessage = config.Bind<string>("WardGuard", "OutsideWardsMessage", "Someone else built this. Only its builder and the players on their ward's list may break it.",
+				"Shown in the middle of the screen of a player refused under OutsideWards, at most every 15 seconds. Empty: no message.");
 			wardGuardMaxActiveWards = config.Bind("WardGuard", "MaxActiveWards", 2,
 				new ConfigDescription("How many wards one player may have switched on at once (a ward is switched on by its creator pressing E on it; building one costs a surtling core, so it takes a few). A player who has that many and tries to switch on another is refused and told; switching one off first, or taking it down, makes room. Two ways: the request is dropped when it passes the server, and, because the game of the player who has just placed a ward handles the key press itself, the server also looks at the wards that are on every few seconds and switches off the newest one of a player who has too many. Wards that are on when the server starts, or when this setting is changed, stay on. A player is held to it while they are in the game (that is when a ward is switched on, and they can be told), and every ward above the limit goes off, the newest first. Admins are not held to it (ExemptAdmins). 0: no limit; there is no LogOnly for this. Without a limit the world fills with wards, and every ward is a base the decay (see [Decay]) keeps alive.",
 					new AcceptableValueRange<int>(0, 50)));
