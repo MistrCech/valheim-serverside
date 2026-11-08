@@ -133,6 +133,7 @@ Clients need nothing.
 | `[ItemLedger] LogAllMovements` | false | Also log every movement of a tracked item (and every craft the ledger counts), not only what cannot be accounted for. |
 | `[ItemLedger] ExemptAdmins` | true | Admins get no account and are never checked. |
 | `[ItemLedger] GraceHours` | 168 | For this long after the ledger first runs on a world, no character counts as new: the players who are already around come back with what they had. |
+| `[ItemLedger] KickMinutes` | 0 | A character with an exact account that wears or drops a tracked item it never got here within this many minutes after its account was opened is kicked (needs `[AntiCheat] Enabled`). 0: nobody is kicked. |
 | `[ItemLedger] Message` / `AltarMessage` | (English text) | Shown in the middle of the player's screen when items are taken away, or a boss altar refuses them. |
 | `[NightSpawnGuard] Enabled` | false | Hold back the spawns that come with boss progress until every player in the spawn zone has got that far themselves (see Night spawn guard below). |
 | `[GuardianStones] Enabled` | false | Show a boss's trophy on its guardian stone, and so offer its power, only to players who have beaten that boss themselves (see Guardian stones below). |
@@ -246,6 +247,10 @@ When a character puts more of an item into the world than it ever got here, and 
 - A fault in the ledger or the guard is logged (at most 20 times in a quarter of an hour) and never stops the game's own code. If the accounts or the known characters cannot be read, that feature stays off until the next start and leaves the file as it is.
 
 Start with `LogOnly` for a while and read the guard log before switching to `On`.
+
+`KickMinutes` kicks a cheater at once, also with `LogOnly`: a new, fresh character that wears or drops, within its first minutes, an item
+it never got here (spawned gear is worn at once) is kicked as the anti-cheat kicks. Only exact accounts, only worn or dropped items and
+only within that window: later, a source the ledger missed could make an honest player look like one.
 
 ## Night spawn guard
 

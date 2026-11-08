@@ -1,3 +1,14 @@
+## [1.32.0] - 2026-11-08
+
+### Added
+
+- `[ItemLedger] KickMinutes` (0, off, by default): a character with an exact account that, within this many minutes after its
+  account was opened here, wears or drops a tracked item it never got here is kicked, as the anti-cheat kicks (`[AntiCheat] Enabled`
+  is needed; its `Message` is shown, admins are exempt). A new, fresh character starts at zero, so in its first minutes such an item
+  can only have come from another world or a cheat. Works with `Mode` LogOnly and On. Nothing else the ledger finds (what goes into
+  a station or a container, what is built with), nothing of an unverified account and nothing later is kicked for: over a long game
+  the ledger can miss a source an honest player used. The guard log line says so: `; kicked (N min after its account was opened)`.
+
 ## [1.31.0] - 2026-11-08
 
 ### Added

@@ -59,6 +59,7 @@ namespace PluginConfiguration
 		public static ConfigEntry<string> itemLedgerAltarMessage;
 		public static ConfigEntry<bool> itemLedgerLogAll;
 		public static ConfigEntry<string> itemLedgerMessage;
+		public static ConfigEntry<float> itemLedgerKickMinutes;
 
 		public static ConfigEntry<bool> nightSpawnGuardEnabled;
 
@@ -302,6 +303,13 @@ namespace PluginConfiguration
 					new AcceptableValueRange<float>(0f, 8760f)));
 			itemLedgerMessage = config.Bind<string>("ItemLedger", "Message", "{0} x {1} did not come from this world and was taken away.",
 				"Shown in the middle of the player's screen when items are taken away (Mode = On). {0} is the amount, {1} the item.");
+			itemLedgerKickMinutes = config.Bind<float>("ItemLedger", "KickMinutes", 0f,
+				new ConfigDescription("A character with an exact account that, within this many minutes after its account was opened here, wears or drops a tracked "
+					+ "item it never got here is kicked, as the anti-cheat kicks ([AntiCheat] Enabled is needed; its Message is shown). A new, fresh character "
+					+ "starts at zero, so in its first minutes such an item can only have come from another world. Works with Mode LogOnly and On. "
+					+ "Nothing else the ledger finds (what goes into a station or a container, what is built with) and nothing later is kicked for: "
+					+ "over a long game the ledger can miss a source an honest player used. 0: nobody is kicked.",
+					new AcceptableValueRange<float>(0f, 10080f)));
 			itemLedgerAltarMessage = config.Bind<string>("ItemLedger", "AltarMessage", "{0} x {1} did not come from this world; the altar refuses them.",
 				"Shown when a boss altar refuses items from another world (Mode = On). {0} is the amount, {1} the item.");
 

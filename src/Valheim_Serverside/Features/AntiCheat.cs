@@ -1633,6 +1633,23 @@ namespace Valheim_Serverside.Features
 			}
 		}
 
+		// A kick another guard asks for (the item ledger): the same message, wait and memory as the rules' own. False when the anti-cheat
+		// is off (nobody would run the kick), the player is gone, exempt as an admin or already being kicked.
+		public static bool KickFor(long user, string why)
+		{
+			if (!Configuration.antiCheatEnabled.Value || ZNet.instance == null || !ZNet.instance.IsServer())
+			{
+				return false;
+			}
+			ZNetPeer peer = ZNet.instance.GetPeer(user);
+			if (peer == null || IsAdmin(peer) || BeingKicked(user))
+			{
+				return false;
+			}
+			Schedule(peer, user, why);
+			return true;
+		}
+
 		private static bool BeingKicked(long user)
 		{
 			return s_kickAt.ContainsKey(user) || (s_kicked.TryGetValue(user, out float at) && Time.time - at < KickMemorySeconds);

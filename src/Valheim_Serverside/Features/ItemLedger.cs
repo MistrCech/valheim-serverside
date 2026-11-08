@@ -982,9 +982,15 @@ namespace Valheim_Serverside.Features
 				return false;
 			}
 			bool act = Enforcing && account.exact && canTakeAway;
+			// KickMinutes: worn or dropped by an exact account in its first minutes here (see the setting). Asked before the line is written.
+			float kickMinutes = Configuration.itemLedgerKickMinutes.Value;
+			double age = (DateTime.UtcNow - account.since).TotalMinutes;
+			bool kicked = kickMinutes > 0f && account.exact && peerUid != 0L && (how == "wears" || how == "dropped") && age <= kickMinutes
+				&& AntiCheat.KickFor(peerUid, "an item from another world");
 			string what = $"{account.name} ({account.id}) {how} {missing} {Label(item, quality)} it never got on this server"
 				+ (account.exact ? "" : " (unverified: what it carried before counting began is unknown)")
-				+ (act ? ": taken away" : "");
+				+ (act ? ": taken away" : "")
+				+ (kicked ? $"; kicked ({age:0} min after its account was opened)" : "");
 			GuardLog.Write(what);
 			// Unverified findings are expected for every character that played before counting began: guard log only.
 			if (account.exact)
