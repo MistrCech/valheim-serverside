@@ -1,3 +1,10 @@
+## [1.30.1] - 2026-11-08
+
+### Changed
+
+- Thunderstore package only (`Sarkastic_gg/Dedicated_Simulation`): the package is in the `AI Generated` category, as
+  Thunderstore's rules ask of mods whose code was written with AI tools (Claude Code). The plugin is 1.30.0, the same DLL.
+
 ## [1.30.0] - 2026-11-07
 
 ### Added
