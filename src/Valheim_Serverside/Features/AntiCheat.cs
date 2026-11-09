@@ -3,6 +3,8 @@ using HarmonyLib;
 using PluginConfiguration;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using UnityEngine;
@@ -15,7 +17,9 @@ namespace Valheim_Serverside.Features
 		fast, how many seeds it costs, how big a stack may be, whether the character may fly. A modified game just does not keep it.
 		What the server does see are the results: the objects a game creates are sent to it, and it can ask of each one whether the
 		game could have made it. That is all this does; it is not a scanner of players' computers and it cannot see a cheat that
-		leaves nothing in the world (a faster run, a free build, a bigger carry weight, a longer reach for a pickaxe).
+		leaves nothing in the world and nothing on the wire (a faster run, a free build, a bigger carry weight, a longer reach for a
+		pickaxe); a cheat that changes how hard a player hits, how it is hurt, what it pays in stamina or how well it fights is seen
+		only by the traces it leaves in what the player's game sends (the combat rules below).
 
 		Every object that a player's game creates (the server sees them arrive in ZDOMan.RPC_ZDOData; whose it is, is the connection it came
 		in on, not the id it carries, which is the sender's claim) is looked at a moment later, when its data has come.
@@ -41,6 +45,31 @@ namespace Valheim_Serverside.Features
 		- Wards, NoBuild, Biome, Dungeon, Cultivated: a piece placed where the game's build mode refuses: in a ward that is switched
 		  on and that the player is not on the list of (the server uses the same rule as the ward guard), in a place where nothing may
 		  be built, in a biome the piece does not belong to, in a dungeon, and (a plant) on ground that is not cultivated.
+		The combat rules (all four Off by default, they only log or kick: there is no object to take away, and admins are exempt). The player's
+		game keeps its own health, stamina, skills and damage; the server sees what that game writes to the character (health, stamina, what it
+		holds and wears, the switches for blocking and dodging), the hits the game sends to what it hit (a routed RPC with the HitData: the
+		damage, the skill and its level, the quality of the weapon) and the hits that creatures the server runs land on the character:
+		- Unhurt: a character that hits do not hurt (god mode, damage immunity). A lethal hit that leaves the health at exactly 1.0 (the
+		  game's god mode clamps to it), twice in ten minutes; or UnhurtHits hits in a row, from creatures, that could not have been
+		  blocked or dodged, worth more than any armour and any protection shield could take (the server reads the largest shield and armour
+		  the game's own status effects give), without the health going down, judged on data the player's game sent after the hit. A player who
+		  is never hit is never seen. Warns first.
+		- Stamina: StaminaAttacks melee attacks in 20 s with a weapon that costs 4 or more while the stamina stays within 1 and the game goes on
+		  sending data -- at the hits AND in the half-second samples taken in between (the game waits a second after an attack before the
+		  stamina regenerates, so an honest character shows "top minus cost" there even if it is back at the top at every attack). A bow, a
+		  spell and fists are not counted. Warns first.
+		- Damage: a hit whose damage in all is above MaxDamage, which is 0 (automatic) by default: the strongest hit a weapon a player can make
+		  sends, every multiplier at its largest, times 1.5, worked out from the game's items and status effects (logged at start as "Damage
+		  bound"). The butcher knife (it works only on tamed animals) has a bound of its own, used when the target is tamed and the knife is in
+		  hand. With On the hit is dropped on its way to the target (the one thing here that changes what the server passes on).
+		- Skills: a weapon skill level (Swords .. ElementalMagic, not the others) that the character cannot have earned here. Per character the
+		  server keeps (<world>.skills.txt) the first level it saw of each skill and the experience of the hits it has seen since; the level a
+		  hit carries, less the most that any status effect adds, must be reachable from there with SkillGainFactor times that experience
+		  plus SkillAllowance. A new, fresh character (the item ledger's rule, with its GraceHours) starts at 0 and is judged exactly;
+		  any other character is judged only on its GROWTH after the first level seen, never on that level (it may have come from another
+		  world). A character that brings its skills from another world looks like a cheat on a fresh account.
+		  After every finding of these rules the guard log gets a line "evidence:" with the last eight hits taken or dealt.
+		Items also looks at a melee hit: its weapon quality (HitData.m_itemLevel) above the quality of the weapon in hand.
 		Only logged by default (LogOnly; set to On they act like the others): Burst (many pieces at once), Health (a piece with more
 		health than its prefab can have; a mod that makes pieces tougher does that too), Rotation (a piece turned in a way the build
 		mode does not offer; the free-rotation mods), Teleport (a jump of hundreds of metres in a moment with no portal at either end;
@@ -56,8 +85,10 @@ namespace Valheim_Serverside.Features
 		the game can make, who made it, and plants that were put down faster than the game allows; `anticheat revert` takes the objects
 		that are set to On away. Objects of players the server has no record of, and admins' objects, are left alone.
 
-		Not covered, and said so in the README: anything the game does inside the player's own game (the speed of the character, the
-		damage of a weapon, what a tool costs, what a recipe asks for, how much can be carried), a mod that changes nothing in what
+		Not covered, and said so in the README: anything the game does inside the player's own game that leaves no trace in what it sends
+		(the speed of the character, what a tool costs, what a recipe asks for, how much can be carried; a damage cheat below the Damage bound, a
+		god mode of a player who is never hit by a creature of the server, stamina cheats on a bow or a spell, skills that grow by what the
+		server cannot count), a mod that changes nothing in what
 		the game sends, and a cheat that is careful: a player who places things one at a time, within reach, on cultivated ground,
 		with a mod that only rotates them, cannot be told from one who does not use the mod.
 	*/
@@ -75,7 +106,8 @@ namespace Valheim_Serverside.Features
 		private enum Rule
 		{
 			UnknownPrefab, NotBuildable, Creator, Distance, Rate, Items, CheatCreature, CheatObject, Fly,
-			Wards, NoBuild, Biome, Dungeon, Cultivated, Burst, Health, Rotation, Fields, Teleport, Speed, Forged, Identity, Flood, Level
+			Wards, NoBuild, Biome, Dungeon, Cultivated, Burst, Health, Rotation, Fields, Teleport, Speed, Forged, Identity, Flood, Level,
+			Unhurt, Stamina, Damage, Skills
 		}
 
 		private static readonly string[] s_labels =
@@ -87,14 +119,16 @@ namespace Valheim_Serverside.Features
 			"built in a dungeon", "planted on ground that is not cultivated", "many pieces at once",
 			"a piece with more health than it can have", "a piece turned in a way the build mode does not offer",
 			"an object with field overrides of an admin tool", "moved far in a moment with no portal", "moved faster than anything in the game",
-			"an object made under the name of another game", "a game that has no character of its own, or names another's", "a flood of objects", "a creature of a level the game never makes"
+			"an object made under the name of another game", "a game that has no character of its own, or names another's", "a flood of objects", "a creature of a level the game never makes",
+			"a character that a lethal hit leaves at exactly 1 health, or that hits do not hurt", "attacks that use no stamina", "a hit stronger than anything in the game deals", "a skill level the character cannot have earned here"
 		};
 
 		// The names the settings and the documentation use.
 		private static readonly string[] s_names =
 		{
 			"UnknownPrefabs", "NotBuildable", "Creator", "Distance", "Rate", "Items", "CheatMarks", "CheatMarksOther", "Fly",
-			"Wards", "NoBuild", "Biome", "Dungeon", "Cultivated", "Burst", "Health", "Rotation", "Fields", "Teleport", "Speed", "Forged", "Identity", "Flood", "Level"
+			"Wards", "NoBuild", "Biome", "Dungeon", "Cultivated", "Burst", "Health", "Rotation", "Fields", "Teleport", "Speed", "Forged", "Identity", "Flood", "Level",
+			"Unhurt", "Stamina", "Damage", "Skills"
 		};
 
 		private static Mode ModeOf(Rule rule)
@@ -124,14 +158,19 @@ namespace Valheim_Serverside.Features
 				case Rule.Identity: return Configuration.antiCheatIdentity.Value;
 				case Rule.Flood: return Configuration.antiCheatFlood.Value;
 				case Rule.Level: return Configuration.antiCheatLevel.Value;
+				case Rule.Unhurt: return Configuration.antiCheatUnhurt.Value;
+				case Rule.Stamina: return Configuration.antiCheatStamina.Value;
+				case Rule.Damage: return Configuration.antiCheatDamage.Value;
+				case Rule.Skills: return Configuration.antiCheatSkills.Value;
 				default: return Configuration.antiCheatRotation.Value;
 			}
 		}
 
-		// What can be taken away: an object. A flying character, a burst of pieces, a tough piece, a fast run and a flood are not taken away.
+		// What can be taken away: an object. A flying character, a burst of pieces, a tough piece, a fast run, a flood, and what the combat rules see are not taken away.
 		private static bool Revertible(Rule rule)
 		{
-			return rule != Rule.Fly && rule != Rule.Burst && rule != Rule.Health && rule != Rule.Rotation && rule != Rule.Teleport && rule != Rule.Speed && rule != Rule.Flood;
+			return rule != Rule.Fly && rule != Rule.Burst && rule != Rule.Health && rule != Rule.Rotation && rule != Rule.Teleport && rule != Rule.Speed && rule != Rule.Flood
+				&& rule != Rule.Unhurt && rule != Rule.Stamina && rule != Rule.Damage && rule != Rule.Skills;
 		}
 
 		// The rules whose answer depends on the state of the server a moment after the player's game decided (a ward switched on, the ground loaded,
@@ -139,7 +178,8 @@ namespace Valheim_Serverside.Features
 		// second time they are kicked.
 		private static bool Soft(Rule rule)
 		{
-			return rule == Rule.Wards || rule == Rule.NoBuild || rule == Rule.Biome || rule == Rule.Dungeon || rule == Rule.Distance || rule == Rule.Identity || rule == Rule.Cultivated;
+			return rule == Rule.Wards || rule == Rule.NoBuild || rule == Rule.Biome || rule == Rule.Dungeon || rule == Rule.Distance || rule == Rule.Identity || rule == Rule.Cultivated
+				|| rule == Rule.Unhurt || rule == Rule.Stamina;
 		}
 
 		// A moment for the rest of an object's data to come before it is judged: the game sends an object and, a frame later, what it
@@ -673,6 +713,18 @@ namespace Valheim_Serverside.Features
 				Fault(e);
 			}
 			Look();
+			if (Time.time >= s_nextCombat && CombatOn())
+			{
+				s_nextCombat = Time.time + 0.5f;
+				try
+				{
+					CombatTick();
+				}
+				catch (Exception e)
+				{
+					Fault(e);
+				}
+			}
 			if (Time.time >= s_nextPlayers)
 			{
 				s_nextPlayers = Time.time + 2f;
@@ -814,6 +866,10 @@ namespace Valheim_Serverside.Features
 				s_stamina.Remove(user);
 				s_serial.Remove(user);
 				s_chains.Remove(user);
+			}
+			foreach (long user in s_fighters.Keys.Where(u => ZNet.instance.GetPeer(u) == null).ToList())
+			{
+				s_fighters.Remove(user);
 			}
 			foreach (long user in s_kicked.Where(kv => Time.time - kv.Value > KickMemorySeconds).Select(kv => kv.Key).ToList())
 			{
@@ -1561,12 +1617,13 @@ namespace Valheim_Serverside.Features
 
 		// ---- what is done -------------------------------------------------------------------------------------------------
 
-		private static void Hit(Rule rule, long user, ZNetPeer peer, ZDO zdo, string prefab, string detail, Vector3 pos)
+		// True when the line was written (the first finding of its kind for the player in ten seconds); the ones that follow are counted.
+		private static bool Hit(Rule rule, long user, ZNetPeer peer, ZDO zdo, string prefab, string detail, Vector3 pos)
 		{
 			Mode mode = ModeOf(rule);
 			if (mode == Mode.Off)
 			{
-				return;
+				return false;
 			}
 			s_hits[(int)rule]++;
 			Action action = mode == Mode.On ? Configuration.antiCheatAction.Value : Action.Log;
@@ -1602,10 +1659,11 @@ namespace Valheim_Serverside.Features
 			{
 				tally.count++;
 				tally.outcome = outcome;
-				return;
+				return false;
 			}
 			s_tallies[key] = new Tally { since = Time.time, count = 0, who = who, label = s_labels[(int)rule], outcome = outcome };
 			Write($"{line}; {outcome}");
+			return true;
 		}
 
 		// How many incidents in the last ten minutes a rule of the warn-first kind was broken in, this one included. Breaks less than IncidentSeconds
@@ -1742,6 +1800,1167 @@ namespace Valheim_Serverside.Features
 					Write($"{Who(peer)} is kicked");
 					ZNet.instance.InternalKick(peer);
 				}
+			}
+		}
+
+		// ---- the combat rules -----------------------------------------------------------------------------------------------
+		// Unhurt, Stamina, Damage and Skills (all Off by default), and the Items rule for the weapon in the hand. The game keeps none of it
+		// where the server can see: health, stamina and skills are kept by the player's own game. What the server sees is what the game
+		// sends: the character's data (health, stamina, what it holds and wears), the hits it sends to what it hits (a routed RPC with the
+		// HitData: the damage, the skill and its level, the weapon's quality) and the hits the server's creatures land on it (Character.Damage
+		// runs on the server for a player's character; the player's game applies them). Nothing here runs while all four rules and Items are Off.
+
+		private static bool CombatOn()
+		{
+			return ModeOf(Rule.Unhurt) != Mode.Off || ModeOf(Rule.Stamina) != Mode.Off || ModeOf(Rule.Damage) != Mode.Off || ModeOf(Rule.Skills) != Mode.Off;
+		}
+
+		private static readonly int s_rpcDamage = "RPC_Damage".GetStableHashCode();
+		private static readonly int s_rpcHit = "Hit".GetStableHashCode();
+		private static readonly int s_rpcApplyOperation = "RPC_ApplyOperation".GetStableHashCode();
+
+		// A hit the server's creature landed on a player's character, kept for the evidence line (the health after it is filled in when it is judged).
+		private class Taken
+		{
+			public float at;
+			public string attacker;
+			public float raw;
+			public float expected;
+			public float before;
+			public float after = -1f;
+			public bool blocked;
+			public bool dodging;
+		}
+
+		// A hit the player's game sent to what it hit.
+		private class Dealt
+		{
+			public float at;
+			public string target;
+			public Skills.SkillType skill;
+			public float level;
+			public int itemLevel;
+			public float damage;
+			public float stamina;
+		}
+
+		// A hit on a character waiting for the character's own data to come: judged when the data has come (Unhurt).
+		private class Pending
+		{
+			public float at;
+			public uint revision;
+			public float before;
+			public float max;
+			public float raw;
+			public float expected;
+			public bool blocked;
+			public bool dodging;
+			public Taken entry;
+		}
+
+		private class Beat
+		{
+			public float at;
+			public float stamina;
+			public uint revision;
+		}
+
+		private class Fighter
+		{
+			public long user;
+			public float seen;
+			public readonly List<Pending> pending = new List<Pending>();
+			public int streak;
+			public float streakTotal;
+			public readonly List<float> clamps = new List<float>();
+			public readonly List<Beat> attacks = new List<Beat>();
+			public readonly List<Beat> ticks = new List<Beat>();
+			public float lastAttack = -99f;
+			public readonly Queue<Taken> taken = new Queue<Taken>();
+			public readonly Queue<Dealt> dealt = new Queue<Dealt>();
+			public readonly Dictionary<int, float> skillFound = new Dictionary<int, float>();
+		}
+
+		private static readonly Dictionary<long, Fighter> s_fighters = new Dictionary<long, Fighter>();
+		private const int EvidenceKept = 24;
+		private const int EvidenceShown = 8;
+		private const int MaxPending = 32;
+		private const float JudgeAfterSeconds = 1.5f;
+		private const float JudgeUntilSeconds = 6f;
+		private const float StaminaWindowSeconds = 20f;
+		private const int MinTickSamples = 3;
+		private const float SameAttackSeconds = 0.25f;
+		private static float s_nextCombat;
+		private static float s_nextCombatPlayers;
+
+		private static Fighter FighterOf(ZNetPeer peer)
+		{
+			if (!s_fighters.TryGetValue(peer.m_uid, out Fighter f))
+			{
+				s_fighters[peer.m_uid] = f = new Fighter { user = peer.m_uid, seen = Time.time };
+			}
+			return f;
+		}
+
+		// A player the combat rules look at: ready, with a character of its own (made by its own game), not an admin, and a character that no other
+		// game has written to.
+		private static ZDO Fighting(ZNetPeer peer)
+		{
+			if (peer == null || !peer.IsReady() || peer.m_characterID.IsNone() || peer.m_characterID.UserID != peer.m_uid || AdminOf(peer) || CharacterTampered(peer))
+			{
+				return null;
+			}
+			return ZDOMan.instance.GetZDO(peer.m_characterID);
+		}
+
+		// ---- what the game says is possible -------------------------------------------------------------------------------
+
+		private static bool s_boundsReady;
+		private static float s_maxHit;
+		private static float s_maxHitTamedOnly;
+		private static float s_shieldMax;
+		private static float s_armorAdd;
+		private static float s_armorMultiplier = 1f;
+		private static readonly Dictionary<int, float> s_skillBonus = new Dictionary<int, float>();
+		private static readonly Dictionary<int, float> s_skillStep = new Dictionary<int, float>();
+		private static readonly float[] s_levelCost = new float[102];
+		private static readonly Dictionary<int, ItemDrop.ItemData.SharedData> s_shared = new Dictionary<int, ItemDrop.ItemData.SharedData>();
+
+		private static readonly Skills.SkillType[] TrackedSkills =
+		{
+			Skills.SkillType.Swords, Skills.SkillType.Knives, Skills.SkillType.Clubs, Skills.SkillType.Polearms, Skills.SkillType.Spears, Skills.SkillType.Axes,
+			Skills.SkillType.Bows, Skills.SkillType.Crossbows, Skills.SkillType.Unarmed, Skills.SkillType.Pickaxes, Skills.SkillType.WoodCutting, Skills.SkillType.ElementalMagic,
+		};
+
+		private static bool IsMelee(Skills.SkillType skill)
+		{
+			switch (skill)
+			{
+				case Skills.SkillType.Swords:
+				case Skills.SkillType.Knives:
+				case Skills.SkillType.Clubs:
+				case Skills.SkillType.Polearms:
+				case Skills.SkillType.Spears:
+				case Skills.SkillType.Axes:
+				case Skills.SkillType.Unarmed:
+				case Skills.SkillType.Pickaxes:
+				case Skills.SkillType.WoodCutting:
+					return true;
+				default:
+					return false;
+			}
+		}
+
+		private static bool IsTracked(Skills.SkillType skill)
+		{
+			return Array.IndexOf(TrackedSkills, skill) >= 0;
+		}
+
+		// What the server's game says is the most that anything gives: computed once, from the status effects and items of ObjectDB, and logged.
+		// - the largest absorb a protection shield can have (SE_Shield, at skill 100, in the world's level);
+		// - the armour a status effect adds to a character (SE_Stats), for the armour the Unhurt rule allows;
+		// - for each tracked skill, the sum of all that any status effect adds to its level (the server cannot know which are active);
+		// - the cost of each level (the experience from level 0 to L) and the experience step of each skill (from the Player prefab);
+		// - the strongest hit a weapon can send (the best weapon at the best quality it has, every multiplier at its largest).
+		private static void CombatBounds()
+		{
+			if (s_boundsReady)
+			{
+				return;
+			}
+			s_boundsReady = true;
+			try
+			{
+				List<StatusEffect> effects = new List<StatusEffect>();
+				HashSet<StatusEffect> known = new HashSet<StatusEffect>();
+				void add(StatusEffect e)
+				{
+					if (e != null && known.Add(e))
+					{
+						effects.Add(e);
+					}
+				}
+				foreach (StatusEffect e in ObjectDB.instance.m_StatusEffects)
+				{
+					add(e);
+				}
+				float strongestMelee = 0f, strongestAmmo = 0f, strongestBow = 0f, strongestTamedOnly = 0f, damageMultiplier = 1f;
+				float worldLevel = Mathf.Max(0f, Game.m_worldLevel);
+				float worldDamage = worldLevel * (Game.instance != null ? Game.instance.m_worldLevelGearBaseDamage : 120);
+				List<(float hit, string name, float total, float multiplier)> melee = new List<(float, string, float, float)>();
+				string meleeName = "?", ammoName = "?", bowName = "?", tamedOnlyName = "?";
+				Dictionary<string, Recipe> recipeOf = new Dictionary<string, Recipe>();
+				foreach (Recipe r in ObjectDB.instance.m_recipes)
+				{
+					if (r != null && r.m_enabled && r.m_item != null)
+					{
+						recipeOf[r.m_item.name] = r;
+					}
+				}
+				HashSet<string> craftable = new HashSet<string>(recipeOf.Keys);
+				// the status effects of the items first: what a status effect does to an attack (SE_Stats.ModifyAttack) is a multiplier on the whole
+				// hit and a percentage on each damage type of its own, so the percentages are taken type by type (the Elder's +60% is chop only)
+				foreach (GameObject go in ObjectDB.instance.m_items)
+				{
+					ItemDrop drop = go ? go.GetComponent<ItemDrop>() : null;
+					if (drop != null)
+					{
+						ItemDrop.ItemData.SharedData s = drop.m_itemData.m_shared;
+						add(s.m_equipStatusEffect);
+						add(s.m_setStatusEffect);
+						add(s.m_consumeStatusEffect);
+						add(s.m_attackStatusEffect);
+					}
+				}
+				HitData.DamageTypes percent = default;
+				foreach (SE_Stats st in effects.OfType<SE_Stats>())
+				{
+					damageMultiplier = Mathf.Max(damageMultiplier, st.m_damageModifier);
+					HitData.DamageTypes p = st.m_percentigeDamageModifiers;
+					percent.m_damage = Mathf.Max(percent.m_damage, p.m_damage);
+					percent.m_blunt = Mathf.Max(percent.m_blunt, p.m_blunt);
+					percent.m_slash = Mathf.Max(percent.m_slash, p.m_slash);
+					percent.m_pierce = Mathf.Max(percent.m_pierce, p.m_pierce);
+					percent.m_chop = Mathf.Max(percent.m_chop, p.m_chop);
+					percent.m_pickaxe = Mathf.Max(percent.m_pickaxe, p.m_pickaxe);
+					percent.m_fire = Mathf.Max(percent.m_fire, p.m_fire);
+					percent.m_frost = Mathf.Max(percent.m_frost, p.m_frost);
+					percent.m_lightning = Mathf.Max(percent.m_lightning, p.m_lightning);
+					percent.m_poison = Mathf.Max(percent.m_poison, p.m_poison);
+					percent.m_spirit = Mathf.Max(percent.m_spirit, p.m_spirit);
+					percent.m_nonPlayer = Mathf.Max(percent.m_nonPlayer, p.m_nonPlayer);
+				}
+				string percentText = string.Join(" ", new[] { ("damage", percent.m_damage), ("blunt", percent.m_blunt), ("slash", percent.m_slash), ("pierce", percent.m_pierce),
+					("chop", percent.m_chop), ("pickaxe", percent.m_pickaxe), ("fire", percent.m_fire), ("frost", percent.m_frost), ("lightning", percent.m_lightning),
+					("poison", percent.m_poison), ("spirit", percent.m_spirit), ("nonPlayer", percent.m_nonPlayer) }.Where(t => t.Item2 > 0f).Select(t => $"{t.Item1} +{t.Item2 * 100f:0}%"));
+				foreach (GameObject go in ObjectDB.instance.m_items)
+				{
+					ItemDrop drop = go ? go.GetComponent<ItemDrop>() : null;
+					if (drop == null)
+					{
+						continue;
+					}
+					ItemDrop.ItemData.SharedData shared = drop.m_itemData.m_shared;
+					add(shared.m_equipStatusEffect);
+					add(shared.m_setStatusEffect);
+					add(shared.m_consumeStatusEffect);
+					add(shared.m_attackStatusEffect);
+					bool weapon = shared.m_itemType == ItemDrop.ItemData.ItemType.OneHandedWeapon || shared.m_itemType == ItemDrop.ItemData.ItemType.TwoHandedWeapon
+						|| shared.m_itemType == ItemDrop.ItemData.ItemType.TwoHandedWeaponLeft || shared.m_itemType == ItemDrop.ItemData.ItemType.Bow || shared.m_itemType == ItemDrop.ItemData.ItemType.Ammo;
+					// only what a player can make: the items of creatures (their attacks are items too) and the admin-only ones (SledgeCheat) have no recipe
+					if (!weapon || !craftable.Contains(drop.name))
+					{
+						continue;
+					}
+					HitData.DamageTypes damage = shared.m_damages;
+					damage.Add(shared.m_damagesPerLevel, Mathf.Max(0, shared.m_maxQuality - 1));
+					if (worldDamage > 0f)
+					{
+						// ItemData.GetDamage(quality, worldLevel): IncreaseEqually(..., separate utility damage). The chop part grows on top of the increase,
+						// so the total grows by more than worldDamage; the game's own method says what it comes to.
+						damage.IncreaseEqually(worldDamage, true);
+					}
+					damage.Modify(percent);
+					float total = damage.GetTotalDamage();
+					float multiplier = 1f;
+					foreach (Attack attack in new[] { shared.m_attack, shared.m_secondaryAttack })
+					{
+						if (attack == null)
+						{
+							continue;
+						}
+						float m = Mathf.Max(1f, attack.m_damageMultiplier);
+						if (attack.m_attackChainLevels > 1)
+						{
+							m *= Mathf.Max(1f, attack.m_lastChainDamageMultiplier);
+						}
+						m *= 1f + Mathf.Max(0f, attack.m_damageMultiplierByTotalHealthMissing);
+						multiplier = Mathf.Max(multiplier, m);
+					}
+					float hit = total * multiplier;
+					if (shared.m_tamedOnly)
+					{
+						// a weapon that only works on tamed animals (the butcher knife) has a bound of its own, used only against a tamed target
+						if (hit > strongestTamedOnly)
+						{
+							strongestTamedOnly = hit;
+							tamedOnlyName = drop.name;
+						}
+						continue;
+					}
+					if (shared.m_itemType == ItemDrop.ItemData.ItemType.Ammo)
+					{
+						if (hit > strongestAmmo)
+						{
+							strongestAmmo = hit;
+							ammoName = drop.name;
+						}
+					}
+					else if (shared.m_itemType == ItemDrop.ItemData.ItemType.Bow)
+					{
+						if (hit > strongestBow)
+						{
+							strongestBow = hit;
+							bowName = drop.name;
+						}
+					}
+					else
+					{
+						melee.Add((hit, drop.name + "[q" + shared.m_maxQuality + " a" + (shared.m_attack != null ? shared.m_attack.m_damageMultiplier.ToString("0.##") + "/" + shared.m_attack.m_attackChainLevels + "/" + shared.m_attack.m_lastChainDamageMultiplier.ToString("0.##") + "/" + shared.m_attack.m_damageMultiplierByTotalHealthMissing.ToString("0.##") : "-") + " b" + (shared.m_secondaryAttack != null ? shared.m_secondaryAttack.m_damageMultiplier.ToString("0.##") + "/" + shared.m_secondaryAttack.m_damageMultiplierByTotalHealthMissing.ToString("0.##") : "-") + " " + (recipeOf.TryGetValue(drop.name, out Recipe rec) ? (rec.m_craftingStation ? rec.m_craftingStation.name : "no station") + " " + rec.m_minStationLevel : "-") + "]", total, multiplier));
+						if (hit > strongestMelee)
+						{
+							strongestMelee = hit;
+							meleeName = drop.name;
+						}
+					}
+				}
+				foreach (StatusEffect e in effects)
+				{
+					if (e is SE_Shield shield)
+					{
+						s_shieldMax = Mathf.Max(s_shieldMax, shield.m_absorbDamage + shield.m_absorbDamagePerSkillLevel * 100f + shield.m_absorbDamageWorldLevel * worldLevel);
+					}
+				}
+				// armour: the largest additions of two effects at once, and the largest multiplier
+				List<float> adds = effects.OfType<SE_Stats>().Select(s => s.m_addArmor).Where(a => a > 0f).OrderByDescending(a => a).ToList();
+				s_armorAdd = adds.Take(2).Sum();
+				s_armorMultiplier = 1f + effects.OfType<SE_Stats>().Select(s => s.m_armorMultiplier).DefaultIfEmpty(0f).Max();
+				foreach (Skills.SkillType skill in TrackedSkills)
+				{
+					float bonus = 0f;
+					foreach (SE_Stats stats in effects.OfType<SE_Stats>())
+					{
+						if (stats.m_skillLevel != Skills.SkillType.None && (stats.m_skillLevel == Skills.SkillType.All || stats.m_skillLevel == skill) && stats.m_skillLevelModifier > 0f)
+						{
+							bonus += stats.m_skillLevelModifier;
+						}
+						if (stats.m_skillLevel2 != Skills.SkillType.None && (stats.m_skillLevel2 == Skills.SkillType.All || stats.m_skillLevel2 == skill) && stats.m_skillLevelModifier2 > 0f)
+						{
+							bonus += stats.m_skillLevelModifier2;
+						}
+					}
+					s_skillBonus[(int)skill] = bonus;
+				}
+				Skills skills = ZNetScene.instance.GetPrefab("Player")?.GetComponent<Skills>();
+				if (skills != null)
+				{
+					foreach (Skills.SkillDef def in skills.m_skills)
+					{
+						s_skillStep[(int)def.m_skill] = def.m_increseStep;
+					}
+				}
+				for (int level = 1; level <= 100; level++)
+				{
+					s_levelCost[level] = s_levelCost[level - 1] + Mathf.Pow(level, 1.5f) * 0.5f + 0.5f;
+				}
+				s_levelCost[101] = s_levelCost[100];
+				// the percentages of status effects are in each weapon's total already (type by type); the multiplier is on the whole hit
+				float strongest = Mathf.Max(strongestMelee, strongestBow + strongestAmmo) * damageMultiplier;
+				s_maxHit = strongest * 1.5f;
+				s_maxHitTamedOnly = strongestTamedOnly * damageMultiplier * 1.5f;
+				ServersidePlugin.logger.LogInfo($"Anti-cheat: Damage bound {(Configuration.antiCheatMaxDamage.Value > 0f ? Configuration.antiCheatMaxDamage.Value.ToString("0") + " (MaxDamage)" : s_maxHit.ToString("0") + " (automatic)")}; automatic {s_maxHit:0} = the strongest hit {strongest:0} x 1.5, "
+					+ $"tamed targets with a tamed-only weapon {s_maxHitTamedOnly:0} ({tamedOnlyName} {strongestTamedOnly:0}); status effects x{damageMultiplier:0.##} and by type {(percentText.Length > 0 ? percentText : "nothing")} at most, world level {worldLevel:0} adds {worldDamage:0} per weapon");
+				ServersidePlugin.logger.LogInfo($"Anti-cheat: combat bounds from the game: the largest protection shield absorbs {s_shieldMax:0}; status effects add up to {s_armorAdd:0} armour (x{s_armorMultiplier:0.##}); "
+					+ $"the strongest hit a weapon sends, all multipliers at their largest (x{damageMultiplier:0.##} and the percentages by type for status effects): {strongest:0} (melee {strongestMelee:0} {meleeName}; bow {strongestBow:0} {bowName} + arrow {strongestAmmo:0} {ammoName})");
+				ServersidePlugin.logger.LogInfo("Anti-cheat: the strongest melee weapons (hit = damage at the top quality x the largest attack multiplier): "
+					+ string.Join(", ", melee.OrderByDescending(m => m.hit).Take(12).Select(m => $"{m.name} {m.hit:0} ({m.total:0} x {m.multiplier:0.##})")));
+				ServersidePlugin.logger.LogInfo("Anti-cheat: skill level bonus of status effects, most of any: " + string.Join(", ", TrackedSkills.Select(s => $"{s} +{s_skillBonus[(int)s]:0.#} (step {(s_skillStep.TryGetValue((int)s, out float step) ? step : 0f):0.##})")));
+			}
+			catch (Exception e)
+			{
+				s_boundsReady = false;
+				s_shieldMax = 0f;
+				s_maxHit = 0f;
+				s_maxHitTamedOnly = 0f;
+				Fault(e);
+			}
+		}
+
+		// The item whose name hash a character's data holds in a slot (the game writes the hash of the prefab's name).
+		private static ItemDrop.ItemData.SharedData SharedOf(int hash)
+		{
+			if (hash == 0)
+			{
+				return null;
+			}
+			if (!s_shared.TryGetValue(hash, out ItemDrop.ItemData.SharedData shared))
+			{
+				GameObject go = ObjectDB.instance.GetItemPrefab(hash);
+				ItemDrop drop = go ? go.GetComponent<ItemDrop>() : null;
+				s_shared[hash] = shared = drop != null ? drop.m_itemData.m_shared : null;
+			}
+			return shared;
+		}
+
+		private static bool IsWeaponType(ItemDrop.ItemData.ItemType type)
+		{
+			return type == ItemDrop.ItemData.ItemType.OneHandedWeapon || type == ItemDrop.ItemData.ItemType.TwoHandedWeapon || type == ItemDrop.ItemData.ItemType.TwoHandedWeaponLeft;
+		}
+
+		// The weapon a character holds: the right hand's item, or the left hand's when that is a two-handed weapon that goes in the left. Its quality is
+		// 0 when the character does not say.
+		private static ItemDrop.ItemData.SharedData WeaponIn(ZDO character, out int quality, out string name)
+		{
+			quality = 0;
+			name = "";
+			int right = character.GetInt(ZDOVars.s_rightItem, 0);
+			ItemDrop.ItemData.SharedData shared = SharedOf(right);
+			if (shared != null && IsWeaponType(shared.m_itemType))
+			{
+				name = ObjectDB.instance.GetItemPrefab(right).name;
+				quality = character.GetInt(ZDOVars.s_rightItemQuality, 0);
+				return shared;
+			}
+			int left = character.GetInt(ZDOVars.s_leftItem, 0);
+			shared = SharedOf(left);
+			if (shared != null && shared.m_itemType == ItemDrop.ItemData.ItemType.TwoHandedWeaponLeft)
+			{
+				name = ObjectDB.instance.GetItemPrefab(left).name;
+				quality = character.GetInt(ZDOVars.s_leftItemQuality, 0);
+				return shared;
+			}
+			return null;
+		}
+
+		// The most armour the character could be wearing: each worn piece at its largest quality, and what the effects can add, with a quarter over.
+		private static float ArmorUpper(ZDO character)
+		{
+			float armor = 0f;
+			float world = Mathf.Max(0f, Game.m_worldLevel) * (Game.instance != null ? Game.instance.m_worldLevelGearBaseAC : 38);
+			foreach (int slot in new[] { ZDOVars.s_helmetItem, ZDOVars.s_chestItem, ZDOVars.s_legItem, ZDOVars.s_shoulderItem })
+			{
+				ItemDrop.ItemData.SharedData shared = SharedOf(character.GetInt(slot, 0));
+				if (shared != null)
+				{
+					armor += shared.m_armor + shared.m_armorPerLevel * Mathf.Max(0, shared.m_maxQuality - 1) + world;
+				}
+			}
+			return (armor + s_armorAdd) * s_armorMultiplier * 1.25f;
+		}
+
+		// ---- evidence ---------------------------------------------------------------------------------------------------------
+
+		private static void Remember<T>(Queue<T> ring, T entry)
+		{
+			ring.Enqueue(entry);
+			while (ring.Count > EvidenceKept)
+			{
+				ring.Dequeue();
+			}
+		}
+
+		// After a finding of the combat rules: the last hits taken or dealt, for the owner to read next to the finding.
+		private static void Evidence(Rule rule, long user)
+		{
+			if (!s_fighters.TryGetValue(user, out Fighter f))
+			{
+				return;
+			}
+			float now = Time.time;
+			List<string> lines;
+			if (rule == Rule.Unhurt)
+			{
+				lines = f.taken.Reverse().Take(EvidenceShown).Reverse().Select(t => $"-{now - t.at:0.0}s {t.attacker} raw {t.raw:0} expected {t.expected:0} health {t.before:0.###}>{(t.after < 0f ? "?" : t.after.ToString("0.###"))}{(t.blocked ? " blocking" : "")}{(t.dodging ? " dodging" : "")}").ToList();
+			}
+			else
+			{
+				lines = f.dealt.Reverse().Take(EvidenceShown).Reverse().Select(d => $"-{now - d.at:0.0}s {d.target} {d.skill} lvl {d.level:0} item {d.itemLevel} dmg {d.damage:0} stamina {d.stamina:0.#}").ToList();
+			}
+			if (lines.Count > 0)
+			{
+				Write("  evidence: " + string.Join("; ", lines));
+			}
+		}
+
+		// A finding of the combat rules (and of Items, for the weapon): the line, and the evidence under it when the line was written.
+		private static void Finding(Rule rule, ZNetPeer peer, string prefab, string detail, Vector3 pos)
+		{
+			if (Hit(rule, peer.m_uid, peer, null, prefab, detail, pos))
+			{
+				Evidence(rule, peer.m_uid);
+			}
+		}
+
+		// ---- Unhurt: hits taken ------------------------------------------------------------------------------------------------
+
+		// Character.Damage on the server for a player's character: the server's creatures (their Attack, Projectile and Aoe) call it, and it sends the hit on to
+		// the player's game, which armours, resists, blocks, dodges and applies it. Here the hit is noted, with what the character looked like.
+		[HarmonyPatch(typeof(Character), "Damage")]
+		public static class Character_Damage_Patch
+		{
+			static void Prefix(Character __instance, HitData hit)
+			{
+				if (hit == null || !(__instance is Player) || !Configuration.antiCheatEnabled.Value || ModeOf(Rule.Unhurt) == Mode.Off)
+				{
+					return;
+				}
+				try
+				{
+					Struck((Player)__instance, hit);
+				}
+				catch (Exception e)
+				{
+					Fault(e);
+				}
+			}
+		}
+
+		private static void Struck(Player player, HitData hit)
+		{
+			if (ZNet.instance == null || !ZNet.instance.IsServer() || ZDOMan.instance == null)
+			{
+				return;
+			}
+			ZNetView view = player.GetComponent<ZNetView>();
+			ZDO zdo = view != null ? view.GetZDO() : null;
+			if (zdo == null || zdo.GetOwner() == ZDOMan.GetSessionID())
+			{
+				return;
+			}
+			ZNetPeer peer = ZNet.instance.GetPeer(zdo.GetOwner());
+			if (peer == null || peer.m_characterID != zdo.m_uid || Fighting(peer) == null)
+			{
+				return;
+			}
+			// A hit of another player (PvP) is another matter; a hit whose attacker the game cannot find is not applied by it.
+			Character attacker = null;
+			if (hit.HaveAttacker())
+			{
+				attacker = hit.GetAttacker();
+				if (attacker == null || attacker.IsPlayer())
+				{
+					return;
+				}
+			}
+			float max = zdo.GetFloat(ZDOVars.s_maxHealth, 0f);
+			float before = zdo.GetFloat(ZDOVars.s_health, max);
+			if (max <= 0f || before <= 0f || zdo.GetBool(ZDOVars.s_dead) || zdo.GetBool(ZDOVars.s_debugFly))
+			{
+				return;
+			}
+			// What the player's game does to a creature's hit before it armours it (Character.RPC_Damage).
+			float scale = 1f;
+			if (attacker != null)
+			{
+				try
+				{
+					scale = Game.instance.GetDifficultyDamageScalePlayer(player.transform.position) * Game.m_enemyDamageRate;
+				}
+				catch (Exception)
+				{
+					scale = Game.m_enemyDamageRate;
+				}
+			}
+			float armor = ArmorUpper(zdo);
+			HitData.DamageTypes d = hit.m_damage;
+			float expected = 0f;
+			foreach (float part in new[] { d.m_blunt, d.m_slash, d.m_pierce })
+			{
+				if (part > 0f)
+				{
+					expected += HitData.DamageTypes.ApplyArmor(part * scale, armor);
+				}
+			}
+			expected *= 0.25f;
+			Fighter f = FighterOf(peer);
+			Taken taken = new Taken
+			{
+				at = Time.time, attacker = attacker != null ? global::Utils.GetPrefabName(attacker.gameObject) : hit.m_hitType.ToString(), raw = hit.GetTotalDamage() * scale, expected = expected, before = before,
+				blocked = zdo.GetBool(ZDOVars.s_isBlockingHash), dodging = zdo.GetBool(ZDOVars.s_dodgeinv),
+			};
+			Remember(f.taken, taken);
+			f.pending.Add(new Pending
+			{
+				at = taken.at, revision = zdo.DataRevision, before = before, max = max, raw = taken.raw, expected = expected, blocked = taken.blocked, dodging = taken.dodging, entry = taken,
+			});
+			if (f.pending.Count > MaxPending)
+			{
+				f.pending.RemoveAt(0);
+			}
+		}
+
+		// The checks that have had the character's own data since the hit (at least three newer revisions: the player's game writes health every
+		// frame it changes), 1.5 s or more after it; the ones that get none within 6 s are dropped without a verdict.
+		private static void JudgeTaken()
+		{
+			foreach (Fighter f in s_fighters.Values.ToList())
+			{
+				if (f.pending.Count == 0)
+				{
+					continue;
+				}
+				ZNetPeer peer = ZNet.instance.GetPeer(f.user);
+				ZDO character = peer != null ? ZDOMan.instance.GetZDO(peer.m_characterID) : null;
+				if (peer == null || character == null || ModeOf(Rule.Unhurt) == Mode.Off)
+				{
+					f.pending.Clear();
+					continue;
+				}
+				float now = Time.time;
+				foreach (Pending p in f.pending.ToList())
+				{
+					float age = now - p.at;
+					if (age < JudgeAfterSeconds)
+					{
+						continue;
+					}
+					if (character.DataRevision < p.revision + 3)
+					{
+						if (age > JudgeUntilSeconds)
+						{
+							f.pending.Remove(p);
+						}
+						continue;
+					}
+					f.pending.Remove(p);
+					try
+					{
+						JudgeOne(f, peer, character, p, now);
+					}
+					catch (Exception e)
+					{
+						Fault(e);
+					}
+				}
+			}
+		}
+
+		private static void JudgeOne(Fighter f, ZNetPeer peer, ZDO character, Pending p, float now)
+		{
+			float health = character.GetFloat(ZDOVars.s_health, p.max);
+			bool dead = character.GetBool(ZDOVars.s_dead);
+			p.entry.after = health;
+			// A lethal hit that left exactly 1.0: the game's god mode clamps to it, an honest health never lands on it.
+			if (!dead && Mathf.Abs(health - 1f) < 0.0005f && p.before > 1.5f && p.raw >= p.before - 1f)
+			{
+				f.clamps.RemoveAll(t => now - t > 600f);
+				f.clamps.Add(now);
+				f.streak = 0;
+				f.streakTotal = 0f;
+				if (f.clamps.Count >= 2)
+				{
+					Finding(Rule.Unhurt, peer, "Player", $"a lethal hit left it at exactly 1 health, {f.clamps.Count} times in {(now - f.clamps[0]) / 60f:0.#} min", character.GetPosition());
+				}
+				return;
+			}
+			if (dead || health < p.before - 0.05f)
+			{
+				f.streak = 0;
+				f.streakTotal = 0f;
+				return;
+			}
+			bool telling = !p.blocked && !p.dodging && !character.GetBool(ZDOVars.s_isBlockingHash) && !character.GetBool(ZDOVars.s_dodgeinv) && p.expected >= Mathf.Max(0.1f * p.max, 5f);
+			if (!telling)
+			{
+				return;
+			}
+			f.streak++;
+			f.streakTotal += p.expected;
+			if (f.streak >= Configuration.antiCheatUnhurtHits.Value && f.streakTotal >= s_shieldMax)
+			{
+				Finding(Rule.Unhurt, peer, "Player", $"{f.streak} hits in a row did not lower its health (they were worth {f.streakTotal:0} at the least; a protection shield absorbs {s_shieldMax:0} at the most)", character.GetPosition());
+				f.streak = 0;
+				f.streakTotal = 0f;
+			}
+		}
+
+		// ---- hits dealt: Damage, Stamina, Skills, Items ------------------------------------------------------------------------
+
+		// First of the routed RPCs, in AntiCheat: it looks only at the three methods it needs (compared by hash before anything is read), reads a copy
+		// of the package and puts the position back; false only drops a hit of the Damage rule.
+		[HarmonyPatch(typeof(ZRoutedRpc), "RPC_RoutedRPC")]
+		public static class ZRoutedRpc_RPC_RoutedRPC_Patch
+		{
+			static bool Prefix(ZRpc rpc, ZPackage pkg)
+			{
+				if (pkg == null || !Configuration.antiCheatEnabled.Value || !(CombatOn() || ModeOf(Rule.Items) != Mode.Off) || ZNet.instance == null || !ZNet.instance.IsServer())
+				{
+					return true;
+				}
+				int start = pkg.GetPos();
+				try
+				{
+					pkg.ReadLong();
+					pkg.ReadLong();
+					pkg.ReadLong();
+					ZDOID target = pkg.ReadZDOID();
+					int method = pkg.ReadInt();
+					if (method != s_rpcDamage && method != s_rpcHit && method != s_rpcApplyOperation)
+					{
+						return true;
+					}
+					ZNetPeer peer = ZNet.instance.GetPeer(rpc);
+					if (peer == null)
+					{
+						return true;
+					}
+					ZPackage parameters = pkg.ReadPackage();
+					return Dealing(peer, method, target, parameters);
+				}
+				catch (Exception e)
+				{
+					Fault(e);
+					return true;
+				}
+				finally
+				{
+					pkg.SetPos(start);
+				}
+			}
+		}
+
+		// False = drop the RPC.
+		private static bool Dealing(ZNetPeer peer, int method, ZDOID target, ZPackage parameters)
+		{
+			ZDO character = Fighting(peer);
+			if (character == null)
+			{
+				return true;
+			}
+			if (method == s_rpcApplyOperation)
+			{
+				if (ModeOf(Rule.Skills) != Mode.Off)
+				{
+					Dug(peer, character);
+				}
+				return true;
+			}
+			HitData hit = new HitData();
+			hit.Deserialize(ref parameters);
+			// Only a player's own hit: what is sent in the name of a creature, or of another player, is not about this player's game.
+			if (hit.m_attacker.IsNone() || hit.m_attacker != peer.m_characterID)
+			{
+				return true;
+			}
+			float now = Time.time;
+			bool combat = CombatOn();
+			Fighter f = combat ? FighterOf(peer) : null;
+			ZDO targetZdo = target.IsNone() ? null : ZDOMan.instance.GetZDO(target);
+			string targetName = "?";
+			if (targetZdo != null)
+			{
+				GameObject prefab = ZNetScene.instance.GetPrefab(targetZdo.GetPrefab());
+				targetName = prefab ? prefab.name : targetZdo.GetPrefab().ToString();
+			}
+			Vector3 pos = targetZdo != null ? targetZdo.GetPosition() : character.GetPosition();
+			float total = hit.GetTotalDamage();
+			float stamina = character.GetFloat(ZDOVars.s_stamina, -1f);
+			if (combat)
+			{
+				Remember(f.dealt, new Dealt { at = now, target = targetName, skill = hit.m_skill, level = hit.m_skillLevel, itemLevel = hit.m_itemLevel, damage = total, stamina = stamina });
+			}
+			bool pass = true;
+			Mode damage = ModeOf(Rule.Damage);
+			if (damage != Mode.Off)
+			{
+				CombatBounds();
+				float maxDamage = Configuration.antiCheatMaxDamage.Value > 0f ? Configuration.antiCheatMaxDamage.Value : s_maxHit;
+				string basis = Configuration.antiCheatMaxDamage.Value > 0f ? "MaxDamage" : "automatic";
+				// A tamed animal hit with a weapon that only works on tamed animals (the butcher knife): that weapon's own bound, always the automatic one.
+				if (s_maxHitTamedOnly > 0f && targetZdo != null && targetZdo.GetBool(ZDOVars.s_tamed, false))
+				{
+					ItemDrop.ItemData.SharedData held = WeaponIn(character, out int heldQuality, out string heldName);
+					if (held != null && held.m_tamedOnly)
+					{
+						maxDamage = s_maxHitTamedOnly;
+						basis = "automatic, " + heldName + " on a tamed animal";
+					}
+				}
+				if (maxDamage > 0f && (float.IsNaN(total) || total > maxDamage))
+				{
+					Finding(Rule.Damage, peer, targetName, $"a hit of {total:0} damage (the most allowed is {maxDamage:0}, {basis}), {hit.m_skill}, on {targetName}", pos);
+					pass = damage != Mode.On;
+				}
+			}
+			if (IsMelee(hit.m_skill) && !hit.m_ranged)
+			{
+				if (combat && ModeOf(Rule.Stamina) != Mode.Off)
+				{
+					Swung(peer, character, f, now, stamina);
+				}
+				if (ModeOf(Rule.Items) != Mode.Off)
+				{
+					ItemDrop.ItemData.SharedData weapon = WeaponIn(character, out int held, out string weaponName);
+					if (weapon != null && held > 0 && hit.m_itemLevel > held)
+					{
+						Finding(Rule.Items, peer, weaponName, $"a hit from a weapon of quality {hit.m_itemLevel}, the weapon in hand is quality {held}", pos);
+					}
+				}
+			}
+			if (ModeOf(Rule.Skills) != Mode.Off && IsTracked(hit.m_skill))
+			{
+				Learned(peer, character, f, hit, pos);
+			}
+			return pass;
+		}
+
+		// ---- Stamina ------------------------------------------------------------------------------------------------------------
+
+		private static void Swung(ZNetPeer peer, ZDO character, Fighter f, float now, float stamina)
+		{
+			if (stamina < 0f || now - f.lastAttack < SameAttackSeconds)
+			{
+				return;
+			}
+			ItemDrop.ItemData.SharedData weapon = WeaponIn(character, out int quality, out string name);
+			if (weapon == null || weapon.m_attack == null)
+			{
+				return;
+			}
+			float cost = weapon.m_attack.m_attackStamina;
+			if (weapon.m_secondaryAttack != null && !string.IsNullOrEmpty(weapon.m_secondaryAttack.m_attackAnimation))
+			{
+				cost = Mathf.Min(cost, weapon.m_secondaryAttack.m_attackStamina);
+			}
+			if (cost < 4f)
+			{
+				return;
+			}
+			f.lastAttack = now;
+			f.attacks.Add(new Beat { at = now, stamina = stamina, revision = character.DataRevision });
+			f.attacks.RemoveAll(a => now - a.at > StaminaWindowSeconds);
+			int needed = Configuration.antiCheatStaminaAttacks.Value;
+			if (f.attacks.Count < needed)
+			{
+				return;
+			}
+			float min = f.attacks.Min(a => a.stamina), maxStamina = f.attacks.Max(a => a.stamina);
+			uint first = f.attacks.Min(a => a.revision), last = f.attacks.Max(a => a.revision);
+			if (maxStamina - min < 1f && min > 0f && last - first >= 10)
+			{
+				// The hit samples alone are not enough: a player whose stamina is back at the top at every attack gives constant hit samples too. The game waits
+				// a second after an attack before it regenerates, so an honest character shows (top - cost) in the half-second samples taken in between.
+				float since = f.attacks[0].at;
+				List<Beat> between = f.ticks.Where(t => t.at >= since).ToList();
+				if (between.Count < MinTickSamples)
+				{
+					return;
+				}
+				float tickMin = between.Min(t => t.stamina), tickMax = between.Max(t => t.stamina);
+				if (tickMax - tickMin >= 1f || tickMin <= 0f)
+				{
+					return;
+				}
+				Finding(Rule.Stamina, peer, name, $"{f.attacks.Count} attacks in {now - f.attacks[0].at:0.#} s with a weapon that costs {cost:0.#}, stamina stayed at {maxStamina:0.#} at the hits and {tickMin:0.#}..{tickMax:0.#} in {between.Count} samples between them", character.GetPosition());
+				f.attacks.Clear();
+				f.ticks.Clear();
+			}
+		}
+
+		// Every half second, for each fighter who has attacked within the window: the stamina its character shows now (what Swung compares with the hit samples).
+		private static void SampleStamina()
+		{
+			float now = Time.time;
+			foreach (Fighter f in s_fighters.Values)
+			{
+				f.ticks.RemoveAll(t => now - t.at > StaminaWindowSeconds);
+				if (f.attacks.Count == 0 || now - f.attacks[f.attacks.Count - 1].at > StaminaWindowSeconds)
+				{
+					continue;
+				}
+				ZNetPeer peer = ZNet.instance.GetPeer(f.user);
+				ZDO character = peer != null ? Fighting(peer) : null;
+				float stamina = character != null ? character.GetFloat(ZDOVars.s_stamina, -1f) : -1f;
+				if (stamina >= 0f)
+				{
+					f.ticks.Add(new Beat { at = now, stamina = stamina, revision = character.DataRevision });
+				}
+			}
+		}
+
+		// ---- Skills ----------------------------------------------------------------------------------------------------------------
+
+		private class SkillAccount
+		{
+			public long id;
+			public string name = "";
+			public bool exact;
+			public DateTime since;
+			public readonly Dictionary<int, float> first = new Dictionary<int, float>();
+			public readonly Dictionary<int, double> xp = new Dictionary<int, double>();
+		}
+
+		private static readonly Dictionary<long, SkillAccount> s_skillAccounts = new Dictionary<long, SkillAccount>();
+		private static string s_skillsPath;
+		private static DateTime s_skillsStarted;
+		private static bool s_skillsLoaded;
+		private static bool s_skillsFailed;
+		private static bool s_skillsDirty;
+		private static float s_skillsNextSave;
+		private const float OpenWaitSeconds = 15f;
+		private const float SkillsSaveSeconds = 300f;
+
+		// The account of the character this peer plays, opened when it is first seen: exact (every skill starts at 0) when the character guard says it is new
+		// and fresh (and the ledger's grace is over), else unverified. The raid list that decides it comes from the player's game a moment after it joins, so
+		// an account that is not exact yet is tried again until OpenWaitSeconds after the player was first seen.
+		private static SkillAccount AccountOf(ZNetPeer peer, ZDO character, Fighter f)
+		{
+			long id = character.GetLong(ZDOVars.s_playerID, 0L);
+			if (id == 0L || s_skillsFailed)
+			{
+				return null;
+			}
+			if (!s_skillsLoaded)
+			{
+				LoadSkills();
+				if (s_skillsFailed)
+				{
+					return null;
+				}
+			}
+			if (s_skillAccounts.TryGetValue(id, out SkillAccount account))
+			{
+				account.name = peer.m_playerName;
+				return account;
+			}
+			CharacterGuard.EnsureFootprint();
+			bool fresh = (DateTime.UtcNow - s_skillsStarted).TotalHours >= Configuration.itemLedgerGraceHours.Value && CharacterGuard.IsBrandNew(peer, character, id);
+			if (!fresh && Time.time - f.seen < OpenWaitSeconds)
+			{
+				return null;
+			}
+			CombatBounds();
+			account = new SkillAccount { id = id, name = peer.m_playerName, exact = fresh, since = DateTime.UtcNow };
+			if (fresh)
+			{
+				foreach (Skills.SkillType skill in TrackedSkills)
+				{
+					account.first[(int)skill] = 0f;
+					account.xp[(int)skill] = 0.0;
+				}
+			}
+			s_skillAccounts[id] = account;
+			s_skillsDirty = true;
+			GuardLog.Write($"{peer.m_playerName} ({id}): skills account opened, " + (fresh ? "exact from zero (a new, fresh character)" : "what it could do when counting began is unknown; judged on its growth from its first levels seen"));
+			return account;
+		}
+
+		private static void Learned(ZNetPeer peer, ZDO character, Fighter f, HitData hit, Vector3 pos)
+		{
+			SkillAccount account = AccountOf(peer, character, f);
+			if (account == null)
+			{
+				return;
+			}
+			int key = (int)hit.m_skill;
+			float level = float.IsNaN(hit.m_skillLevel) ? 0f : Mathf.Clamp(hit.m_skillLevel, 0f, 1000f);
+			if (!account.first.ContainsKey(key))
+			{
+				// First seen, not from zero: the most it could have had then is what the hit says.
+				account.first[key] = account.exact ? 0f : level;
+				account.xp[key] = 0.0;
+			}
+			CombatBounds();
+			float step = s_skillStep.TryGetValue(key, out float s) ? s : 1f;
+			account.xp[key] += Mathf.Clamp(hit.m_skillRaiseAmount, 0f, 100f) * 1.5f * step * Skills_GainRate();
+			s_skillsDirty = true;
+			float least = Mathf.Max(0f, level - (s_skillBonus.TryGetValue(key, out float bonus) ? bonus : 0f));
+			int claimed = Mathf.Clamp(Mathf.FloorToInt(least), 0, 100);
+			int from = Mathf.Clamp(Mathf.FloorToInt(account.first[key]), 0, 100);
+			float needed = s_levelCost[claimed] - s_levelCost[from];
+			float allowed = Configuration.antiCheatSkillGainFactor.Value * (float)account.xp[key] + Configuration.antiCheatSkillAllowance.Value;
+			if (needed <= allowed)
+			{
+				return;
+			}
+			if (f.skillFound.TryGetValue(key, out float last) && Time.time - last < 600f)
+			{
+				return;
+			}
+			f.skillFound[key] = Time.time;
+			Finding(Rule.Skills, peer, "Player", $"{hit.m_skill} level >= {claimed} (sent {hit.m_skillLevel:0}), it has earned at most {account.xp[key]:0} experience of the {needed:0} needed since {account.since:yyyy-MM-dd}"
+				+ (account.exact ? " (exact from zero)" : $" (first seen at {account.first[key]:0})"), pos);
+		}
+
+		private static float Skills_GainRate()
+		{
+			return Mathf.Max(0f, Game.m_skillGainRate);
+		}
+
+		// A terrain operation from the player's game (digging, levelling, paving) raises the pickaxe skill.
+		private static void Dug(ZNetPeer peer, ZDO character)
+		{
+			Fighter f = FighterOf(peer);
+			SkillAccount account = AccountOf(peer, character, f);
+			if (account == null)
+			{
+				return;
+			}
+			int key = (int)Skills.SkillType.Pickaxes;
+			if (!account.first.ContainsKey(key))
+			{
+				return;
+			}
+			CombatBounds();
+			account.xp[key] += 1.5 * (s_skillStep.TryGetValue(key, out float step) ? step : 1f) * Skills_GainRate();
+			s_skillsDirty = true;
+		}
+
+		/*
+			<world>.skills.txt next to the world save. A "started" line, then one line per character, tab separated: id, exact or unknown, counting since,
+			name, skill=first:xp,... (the first level seen and the experience counted since).
+		*/
+		private static void LoadSkills()
+		{
+			s_skillsLoaded = true;
+			s_skillsStarted = DateTime.UtcNow;
+			try
+			{
+				World world = ZNet.World;
+				s_skillsPath = Path.Combine(SaveSystem.GetWorldsSaveRootPath(world.m_fileSource), world.m_name + ".skills.txt");
+				string read = File.Exists(s_skillsPath) ? s_skillsPath : File.Exists(s_skillsPath + ".tmp") ? s_skillsPath + ".tmp" : null;
+				if (read == null)
+				{
+					s_skillsDirty = true;
+					return;
+				}
+				foreach (string line in File.ReadAllLines(read))
+				{
+					string[] fields = line.Split('\t');
+					if (fields[0] == "started" && fields.Length > 1)
+					{
+						s_skillsStarted = ParseTime(fields[1]);
+						continue;
+					}
+					if (line.StartsWith("#", StringComparison.Ordinal) || fields.Length < 5 || !long.TryParse(fields[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out long id))
+					{
+						continue;
+					}
+					SkillAccount account = new SkillAccount { id = id, exact = fields[1] == "exact", since = ParseTime(fields[2]), name = fields[3] };
+					foreach (string pair in fields[4].Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+					{
+						string[] kv = pair.Split('=');
+						string[] values = kv.Length == 2 ? kv[1].Split(':') : new string[0];
+						if (values.Length == 2 && Enum.IsDefined(typeof(Skills.SkillType), kv[0]) && float.TryParse(values[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float first)
+							&& double.TryParse(values[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double xp))
+						{
+							int key = (int)Enum.Parse(typeof(Skills.SkillType), kv[0]);
+							account.first[key] = first;
+							account.xp[key] = xp;
+						}
+					}
+					s_skillAccounts[id] = account;
+				}
+			}
+			catch (Exception e)
+			{
+				s_skillsFailed = true;
+				ServersidePlugin.logger.LogError($"Anti-cheat: could not read the skills ledger, so the Skills rule stays off until the server restarts: {e}");
+				GuardLog.Write($"AntiCheat: could not read the skills ledger ({e.GetType().Name}: {e.Message}), so the Skills rule stays off until the server restarts");
+			}
+		}
+
+		private static string FormatTime(DateTime t)
+		{
+			return t.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+		}
+
+		private static DateTime ParseTime(string s)
+		{
+			return DateTime.TryParseExact(s, "yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out DateTime t) ? t : DateTime.UtcNow;
+		}
+
+		// Written to a temp file and moved over the old one, as the item ledger does.
+		public static void SaveSkills()
+		{
+			if (!s_skillsLoaded || s_skillsFailed || s_skillsPath == null || !s_skillsDirty)
+			{
+				return;
+			}
+			s_skillsDirty = false;
+			s_skillsNextSave = Time.time + SkillsSaveSeconds;
+			try
+			{
+				List<string> lines = new List<string>
+				{
+					"# Sarkastic.gg Dedicated Simulation: skills ledger -- what each character's weapon skills could have grown to on this world. Tab separated:",
+					"# id, exact/unknown (unknown = its levels when counting began are not known), counting since (UTC), name, skill=first level seen:experience counted since,...",
+					"started\t" + FormatTime(s_skillsStarted),
+				};
+				foreach (SkillAccount a in s_skillAccounts.Values.OrderBy(a => a.since))
+				{
+					lines.Add(string.Join("\t", new[]
+					{
+						a.id.ToString(CultureInfo.InvariantCulture), a.exact ? "exact" : "unknown", FormatTime(a.since), (a.name ?? "").Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' '),
+						string.Join(",", a.first.OrderBy(kv => kv.Key).Select(kv => $"{(Skills.SkillType)kv.Key}={kv.Value.ToString("0.##", CultureInfo.InvariantCulture)}:{(a.xp.TryGetValue(kv.Key, out double xp) ? xp : 0.0).ToString("0.###", CultureInfo.InvariantCulture)}")),
+					}));
+				}
+				string temp = s_skillsPath + ".tmp";
+				File.WriteAllLines(temp, lines);
+				if (File.Exists(s_skillsPath))
+				{
+					File.Delete(s_skillsPath);
+				}
+				File.Move(temp, s_skillsPath);
+			}
+			catch (Exception e)
+			{
+				s_skillsDirty = true;
+				ServersidePlugin.logger.LogWarning($"Anti-cheat: could not save {s_skillsPath}: {e.Message}");
+			}
+		}
+
+		// The skills ledger is saved with the world (so that after a crash both come back from the same moment) and when a player leaves.
+		[HarmonyPatch(typeof(ZNet), "SaveWorld")]
+		public static class ZNet_SaveWorld_Patch
+		{
+			static void Postfix()
+			{
+				if (ModeOf(Rule.Skills) != Mode.Off && Configuration.antiCheatEnabled.Value)
+				{
+					SaveSkills();
+				}
+			}
+		}
+
+		[HarmonyPatch(typeof(ZNet), "Disconnect")]
+		public static class ZNet_Disconnect_Patch
+		{
+			static void Prefix()
+			{
+				if (s_skillsLoaded && s_skillsDirty && Configuration.antiCheatEnabled.Value)
+				{
+					SaveSkills();
+				}
+			}
+		}
+
+		// ---- the combat tick: every half second the checks that wait for fresh data; every two seconds the accounts ------------------------
+
+		private static void CombatTick()
+		{
+			if (ModeOf(Rule.Unhurt) != Mode.Off)
+			{
+				CombatBounds();
+				JudgeTaken();
+			}
+			if (ModeOf(Rule.Stamina) != Mode.Off)
+			{
+				SampleStamina();
+			}
+			if (Time.time < s_nextCombatPlayers)
+			{
+				return;
+			}
+			s_nextCombatPlayers = Time.time + 2f;
+			if (ModeOf(Rule.Skills) != Mode.Off)
+			{
+				foreach (ZNetPeer peer in ZNet.instance.GetPeers().ToList())
+				{
+					ZDO character = Fighting(peer);
+					if (character != null)
+					{
+						AccountOf(peer, character, FighterOf(peer));
+					}
+				}
+				if (s_skillsDirty && Time.time >= s_skillsNextSave)
+				{
+					SaveSkills();
+				}
+			}
+			foreach (long user in s_fighters.Keys.Where(u => ZNet.instance.GetPeer(u) == null).ToList())
+			{
+				s_fighters.Remove(user);
 			}
 		}
 

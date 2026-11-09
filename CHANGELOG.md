@@ -1,3 +1,50 @@
+## [1.33.0] - 2026-11-09
+
+### Added
+
+All off by default; the rules of the ward guard (`[WardGuard] Enabled`) it extends are unchanged.
+
+- `[WardGuard] DestroyLog`: a line in `<world>.guard.log` when a player's build is destroyed by someone other than its builder:
+  who (a player; a creature and the player it was after; the kind of hit and the game that sent it; "took it down";
+  "collapsed or removed by the server"), whose piece, where. One line per destroyer and builder a minute, with a count and up to eight
+  prefab names. A request to destroy what another game or the server owns is logged too, whatever `DestroyRequests` says. Nothing is stopped.
+- `[WardGuard] Claims` (Off, LogOnly, On): a game taking over a player's build it may not act on by the ward guard's rules (the first
+  step of destroying it, since a destroy request has no owner check, or of rewriting it). On leaves the owner where it was and drops the
+  data in the packet; LogOnly writes the line and lets it through. An object nobody owns, a new object and a player's own are left alone.
+- `[WardGuard] IndirectHits` (Off, LogOnly, On): a hit with no attacker (catapult, fire, falling object) or by a creature the sender's
+  game owns, which the guard let through as not a player's own, counted as the sender's own hit. LogOnly names the kind of hit in the line.
+- `[WardGuard] TamedAnimals` (Off, LogOnly, On): hitting, commanding, naming, saddling and riding a tamed animal inside an enabled ward
+  by a player who is not on its list.
+- `[WardGuard] Vehicles` (Off, LogOnly, On): ships and carts a player built, anywhere: the helm, steering, owning a cart and a ship's
+  chest are for the builder, the players on the list of one of the builder's wards and admins. The server also does not hand such a ship
+  or cart to a game that may not use it. A catapult's loading, firing and legs are dropped as well, and a shot sent to a catapult the
+  server owns (it would be fired by the server itself, and its hits are never seen by the guard) is dropped for anyone but an admin
+  whenever `Vehicles` or `IndirectHits` is not Off (the stricter of the two decides; LogOnly only writes the line).
+- `[WardGuard] Terrain` (Off, LogOnly, On) and `TerrainMargin` (2 m): terrain operations (hoe, pickaxe, cultivator, paving) that reach
+  into an enabled ward the player is not on the list of (`Structures`), or come within `TerrainMargin` of a build of a player whose side
+  the player is not on (`OutsideWards`), are dropped. The server keeps the terrain compilers: a compiler a player's game creates (the first
+  dig in a zone nobody dug before, which that game would own and run on its own) is judged on the last operation in its data and on every place where its
+  data changes the height of the ground (in cells of 2 m), whoever the packet names as its owner, and destroyed (On) if that would be refused or if the zone already has a compiler (a forged duplicate with many operations replaces the ground in every
+  game); one that is kept is taken over by the server at once, so the player's next operation goes through the check; a game that says it
+  owns an existing compiler, or sends the data of one it does not own, is refused like a `Claims` claim, whatever `Claims` is set to.
+  An admin's game is exempt.
+- `[AntiCheat]` combat rules `Unhurt`, `Stamina`, `Damage`, `Skills` (all Off by default; they log or kick, nothing in the world is taken
+  away, admins are exempt) for cheats of the player's own game that the server sees only by what the game sends:
+  - `Unhurt` (+`UnhurtHits` 8, warns first): a lethal hit from a creature of the server that leaves the character at exactly 1.0 health
+    twice in ten minutes (the game's god mode), or `UnhurtHits` hits in a row that no armour or shield the game can give could have taken
+    and that did not lower the health, judged on the data the player's game sends after the hit.
+  - `Stamina` (+`StaminaAttacks` 12, warns first): melee attacks with a weapon that costs 4 or more in 20 seconds while the stamina stays put
+    at the hits and in the half-second samples the server takes between them (a character whose stamina is back at the top at every swing is
+    no finding: the game shows the price for a second after each).
+  - `Damage` (+`MaxDamage` 0 = automatic): a hit above the strongest a weapon of the game can make (every multiplier at its largest, the world
+    level, the status effects on damage: their multiplier and their percentage per damage type, times 1.5: 2067 on game 1.0.20, logged at start); the butcher knife, which works only on tamed
+    animals, has a bound of its own (5625) against a tamed animal. A positive `MaxDamage` is used as it is. On drops the hit on its way to the target.
+  - `Skills` (+`SkillGainFactor` 3, +`SkillAllowance` 80): a weapon skill level that costs more experience than the server has seen the
+    character earn since the first level it saw (zero for a new, fresh character, as the item ledger counts it; for any other character the
+    first level seen is not judged, only the growth). Kept per character in `<world>.skills.txt`, saved with the world.
+  - Each finding is followed by an `evidence:` line in the guard log with the last eight hits taken or dealt.
+  - `Items` also flags a melee hit that carries a weapon quality higher than that of the weapon in the character's hand.
+
 ## [1.32.0] - 2026-11-08
 
 ### Added

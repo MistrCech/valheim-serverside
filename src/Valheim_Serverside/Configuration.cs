@@ -90,6 +90,13 @@ namespace PluginConfiguration
 		public static ConfigEntry<string> wardGuardTombstonesMessage;
 		public static ConfigEntry<int> wardGuardMaxActiveWards;
 		public static ConfigEntry<string> wardGuardMaxActiveWardsMessage;
+		public static ConfigEntry<bool> wardGuardDestroyLog;
+		public static ConfigEntry<Valheim_Serverside.Features.WardGuard.Mode> wardGuardClaims;
+		public static ConfigEntry<Valheim_Serverside.Features.WardGuard.Mode> wardGuardIndirectHits;
+		public static ConfigEntry<Valheim_Serverside.Features.WardGuard.Mode> wardGuardTamedAnimals;
+		public static ConfigEntry<Valheim_Serverside.Features.WardGuard.Mode> wardGuardVehicles;
+		public static ConfigEntry<Valheim_Serverside.Features.WardGuard.Mode> wardGuardTerrain;
+		public static ConfigEntry<float> wardGuardTerrainMargin;
 
 		public static ConfigEntry<Valheim_Serverside.Features.Decay.Mode> decayMode;
 		public static ConfigEntry<float> decayWardGraceDays;
@@ -159,6 +166,15 @@ namespace PluginConfiguration
 		public static ConfigEntry<float> antiCheatTeleportMetres;
 		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatSpeed;
 		public static ConfigEntry<float> antiCheatSpeedLimit;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatUnhurt;
+		public static ConfigEntry<int> antiCheatUnhurtHits;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatStamina;
+		public static ConfigEntry<int> antiCheatStaminaAttacks;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatDamage;
+		public static ConfigEntry<float> antiCheatMaxDamage;
+		public static ConfigEntry<Valheim_Serverside.Features.AntiCheat.Mode> antiCheatSkills;
+		public static ConfigEntry<float> antiCheatSkillGainFactor;
+		public static ConfigEntry<float> antiCheatSkillAllowance;
 
 		public static ConfigEntry<bool> guardianStonesEnabled;
 		public static ConfigEntry<bool> welcomeEnabled;
@@ -383,6 +399,22 @@ namespace PluginConfiguration
 			wardGuardMaxActiveWardsMessage = config.Bind<string>("WardGuard", "MaxActiveWardsMessage", "You can keep only {0} wards switched on. Switch one of yours off first (E on it), or take it down. A ward that is off no longer holds its base against decay.",
 				"Shown in the middle of the screen of a player refused a further ward, at most every 3 seconds. {0} is the limit. Empty: no message.");
 
+			wardGuardDestroyLog = config.Bind<bool>("WardGuard", "DestroyLog", false,
+				"Write to the guard log (<world>.guard.log, lines starting \"ward guard: destroyed:\") every time a player's build is destroyed by someone other than its builder: whose piece it was, which, where, and what destroyed it -- a player's hit (name and id), a creature (and the player it was chasing), a hit with no attacker (its type, and the player whose game sent it), a take-down with the hammer (the player), or the server itself (a piece collapsing). Also writes the requests of a player's game to destroy (RPC DestroyZDO) a piece somebody else built. At most one line a minute per destroyer and builder, with how many there were and up to 8 piece names. Only writes; nothing is stopped. Nothing to do with [Decay], whose removals are not logged here.");
+			wardGuardClaims = config.Bind("WardGuard", "Claims", Valheim_Serverside.Features.WardGuard.Mode.Off,
+				"A game takes over an object by telling the server it owns it now (a sign it writes on, a turret it puts a trophy on, a piece it takes down with the hammer when the piece is not a WearNTear), and the server believes it. When the sender's game takes over a player's build (anything with a creator) that another game or the server owns, and the sender may not act on that build by the rules above (Structures: inside a ward whose list does not have them; OutsideWards: a build outside wards that is not theirs and not their friends'; Vehicles: someone else's ship or cart), On keeps the owner as it is, drops the data that came with the claim and sends every game the server's copy again (so a changed sign text, a trophy or an owner is undone), LogOnly only writes it to the guard log. Objects nobody owns (a fireplace, a cooking station) and objects a game hands on by itself (a ship, a cart, a chest) are not claims. Needs at least one of Structures, OutsideWards and Vehicles to be on to do anything. Admins are exempt (ExemptAdmins).");
+			wardGuardIndirectHits = config.Bind("WardGuard", "IndirectHits", Valheim_Serverside.Features.WardGuard.Mode.Off,
+				"Structures and OutsideWards let through a hit that is not a player's own: one with no attacker (fire, a falling object, a catapult, a cart, a boat, a felled tree) or one whose attacker is a creature that the sender's own game owns. In this mod the server runs the creatures, so a hit like that sent by a player's game is that player's doing: a catapult, a ridden animal, a fire they lit, a tree they felled, or a modified game that names no attacker. On treats such a hit as the player's own and refuses it where Structures or OutsideWards would refuse a player's hit; LogOnly writes the refusal it would make to the guard log (with the hit's type) and lets it through; Off lets it through as before. Monsters the server owns never pass this check and are not touched. Fire that burns a wall by itself is made by the server and is not touched either.");
+			wardGuardTamedAnimals = config.Bind("WardGuard", "TamedAnimals", Valheim_Serverside.Features.WardGuard.Mode.Off,
+				"A tamed animal standing inside an enabled ward is held to the ward's list: a player not on it cannot hit it, give it orders (Command), name it, put a saddle on it or take it off, ride it (RequestControl, and the riding controls) -- On drops the request (a request to ride is answered no), LogOnly writes it to the guard log. Hits follow IndirectHits like any other hit. Outside wards nothing changes: the game records no tamer. Admins are exempt (ExemptAdmins).");
+			wardGuardVehicles = config.Bind("WardGuard", "Vehicles", Valheim_Serverside.Features.WardGuard.Mode.Off,
+				"A ship or a cart that somebody built may be used only by its builder, the players on the list of one of the builder's wards (switched on or not) and admins (ExemptAdmins), anywhere: taking the helm (RequestControl, answered no), the sail and rudder controls, taking the cart (RPC_RequestOwn, answered denied), and opening the storage of a ship or cart whose container is part of the vehicle's own object. The server also does not hand such a vehicle to the game of a player who may not use it (the mod gives a ship to the game of whoever is at its helm). On drops the request, LogOnly writes it to the guard log. Hitting or taking down a vehicle is covered as for any piece. Vehicles nobody built stay open.");
+			wardGuardTerrain = config.Bind("WardGuard", "Terrain", Valheim_Serverside.Features.WardGuard.Mode.Off,
+				"A hoe, a pickaxe or a cultivator changes the ground by an RPC to the terrain's owner, and nothing in the game looks at a ward. With On the server drops such an operation of a player when (a) Structures is on and an enabled ward whose list does not have the player lies within its radius plus the operation's radius of the place, or (b) OutsideWards is on and a build of someone whose side the player is not on lies within the operation's radius plus TerrainMargin of the place (horizontally, and only where the builder owns the build by the OutsideWards rule). The operation is dropped whole; there is no reply, the player's ground looks dug until they walk away and back. LogOnly writes it to the guard log and lets it through. Admins are exempt (ExemptAdmins).");
+			wardGuardTerrainMargin = config.Bind("WardGuard", "TerrainMargin", 2f,
+				new ConfigDescription("How far beyond the operation's own radius a build counts as touched by it (metres), for Terrain rule (b): digging beside a wall undermines it. The wards of rule (a) need no margin: a ward's radius is the margin.",
+					new AcceptableValueRange<float>(0f, 20f)));
+
 			decayMode = config.Bind("Decay", "Mode", Valheim_Serverside.Features.Decay.Mode.Off,
 				"Take down what players built once the players it belongs to have stayed away long enough, so abandoned bases do not fill the world for ever. Off: nothing is tracked, and the decay clock stands still. DryRun: tracks the players and writes to the log (and <world>.guard.log) what would be taken down and when, changes nothing in the world -- run it for two weeks first (the first ward base can only begin after WardGraceDays) and read the log; it lists portals, ships and chests in every base. On: does it; `decay clear` on the server console is the way back. Pieces are everything a player built: walls and floors, chests with what is in them, beds, portals, ships and carts, crops, signs. A piece is protected as long as any claim on it is within its grace: a ward that is switched on (the owner and the players on its list hold it), a workbench within WorkbenchRadius (its builder holds it), or its builder alone; when the last has lapsed the piece goes with the base of that claim, over that claim's fade (see the days below). Nothing starts or is taken down while one of the players who hold the base is in the game. The decay clock counts only the time the server runs under decay. A player the server has not met counts as active from the first time it sees their builds, so switching decay on for the first time takes down nothing at once; after a dry run, the bases that have lapsed in the meantime (the log lists them) begin as soon as On is set. Players are told when they join. See the README.");
 			decayWardGraceDays = config.Bind("Decay", "WardGraceDays", 14f,
@@ -511,6 +543,29 @@ namespace PluginConfiguration
 			antiCheatSpeedLimit = config.Bind("AntiCheat", "SpeedLimit", 30f,
 				new ConfigDescription("Metres per second. A run is 7, a ship under a good wind 15; the mods that speed a player up on paths (SpeedyPaths: 1.4 times) stay well under this and are not caught by it.",
 					new AcceptableValueRange<float>(10f, 200f)));
+			antiCheatUnhurt = config.Bind("AntiCheat", "Unhurt", Valheim_Serverside.Features.AntiCheat.Mode.Off,
+				"A character that hits do not hurt (god mode, damage immunity mods). The server cannot read the switch, but it sees the effect: a lethal hit that leaves the character at exactly 1 health (the game's god mode clamps to 1.0; an honest character never ends at exactly 1.0), twice within ten minutes, or UnhurtHits hits in a row that should have taken a real part of its health and did not (not blocked or dodged, more than any armour and resistance could take away, and more in all than a protection shield can absorb), judged on data that the player's game has sent after the hit. Needs a lethal or a telling hit from a creature of the server's game, so it never sees a player who is never hit. Warns first, see SoftStrikes. Off by default. Off, LogOnly or On.");
+			antiCheatUnhurtHits = config.Bind("AntiCheat", "UnhurtHits", 8,
+				new ConfigDescription("How many hits in a row that left the health untouched (see Unhurt) make a finding.",
+					new AcceptableValueRange<int>(3, 100)));
+			antiCheatStamina = config.Bind("AntiCheat", "Stamina", Valheim_Serverside.Features.AntiCheat.Mode.Off,
+				"Attacks that use no stamina (infinite stamina mods): the player's game writes its stamina to the character, and an attack pays its price when it starts. StaminaAttacks melee attacks in 20 seconds with a weapon that costs 4 or more, while the stamina the server sees stays within 1 of itself (and above 0) and the character sends fresh data all the while, are a finding. A bow, a spell and fists are not counted. Warns first, see SoftStrikes. Off by default. Off, LogOnly or On.");
+			antiCheatStaminaAttacks = config.Bind("AntiCheat", "StaminaAttacks", 12,
+				new ConfigDescription("How many attacks in 20 seconds without a change in stamina make a finding.",
+					new AcceptableValueRange<int>(4, 200)));
+			antiCheatDamage = config.Bind("AntiCheat", "Damage", Valheim_Serverside.Features.AntiCheat.Mode.Off,
+				"A hit from a player that is stronger than anything in the game deals (the total of all its damage types is above MaxDamage, by default the automatic bound): the damage of a hit is set by the attacker's game. On, the hit is also dropped on its way to the target (the server does not pass it on). LogOnly only logs. Off by default. Off, LogOnly or On.");
+			antiCheatMaxDamage = config.Bind("AntiCheat", "MaxDamage", 0f,
+				new ConfigDescription("The most damage one hit may deal, all types together. 0 = automatic (the default): the server works out from the game's own items and status effects the strongest hit a weapon a player can make sends, with every multiplier at its largest (quality, world level, the attack's multipliers, the status effects on damage), and allows 1.5 times that; it is logged at start (\"Damage bound\"). The butcher knife, which works only on tamed animals, has a bound of its own that counts only against a tamed animal. A positive value is used as it is (for a world with higher damage settings or a mod that makes weapons stronger); a tamed animal hit with the butcher knife still has the automatic bound of the knife.",
+					new AcceptableValueRange<float>(0f, 1000000f)));
+			antiCheatSkills = config.Bind("AntiCheat", "Skills", Valheim_Serverside.Features.AntiCheat.Mode.Off,
+				"A skill level that the character cannot have earned here. The server keeps, per character, the first level it saw of each weapon skill (zero for a new, fresh character, as the item ledger counts it) and how much experience the hits it sent since were worth; the level a hit carries (less the most any status effect adds) must be reachable from there with SkillGainFactor times that experience plus SkillAllowance. A character that brings its skills from another world looks like a cheat on a fresh account: use LogOnly if you let those in. Only Swords, Knives, Clubs, Polearms, Spears, Axes, Bows, Crossbows, Unarmed, Pickaxes, WoodCutting and ElementalMagic are tracked. An account that was not fresh when it was opened is judged on its growth only. Kept in <world>.skills.txt next to the world; uses the item ledger's GraceHours for deciding who is new. Off by default. Off, LogOnly or On.");
+			antiCheatSkillGainFactor = config.Bind("AntiCheat", "SkillGainFactor", 3f,
+				new ConfigDescription("How many times the counted experience a character may have earned (the server counts every hit, a swing that hits several targets raises a skill once; the world's skill gain rate is included; a character gets experience for things the server does not see).",
+					new AcceptableValueRange<float>(1f, 1000f)));
+			antiCheatSkillAllowance = config.Bind("AntiCheat", "SkillAllowance", 80f,
+				new ConfigDescription("Experience on top of the counted one that is let through, in the unit of the game's skill experience (reaching level 10 from 0 takes about 76, level 20 about 330).",
+					new AcceptableValueRange<float>(0f, 100000f)));
 
 			rpcCensusEnabled = config.Bind<bool>("RpcCensus", "Enabled", false,
 				"Note every RPC a player's game sends that the game itself does not have: the mark a mod on their client leaves on the wire (a config sync, a map share, a version check). Which one (by name when it is in DS's table of mods' RPC names, else its hash), how often, to whom, and a few readable words out of it. One line in the log the first time a player sends each in a run, a summary when they leave, everything kept in <world>.rpcs.txt next to the world. Nothing is blocked or changed. Needs a restart.");

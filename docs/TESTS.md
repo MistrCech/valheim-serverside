@@ -12,6 +12,49 @@ Tested on a copy of the live world with three simulated players -- a ward's owne
 
 Then the rest of 1.31.0 in the same three runs (the first with `OutsideWards` On, `OwnPieces` and `Tombstones` On, the other two with them Off): a chest, a door, a fire pit and a carrot sapling of the owner's outside the ward, a carrot nobody planted, a wall and a chest the stranger built inside the owner's ward, and a tombstone of the owner's. The sapling was grown on the server, and the crop carried its planter (the owner's id; with the guard off, none). With the rules On, the stranger was refused opening the owner's chest outside the ward (it answered no), his door, switching his fire pit off and picking his crop (it stayed, nothing dropped), opening the tombstone and taking everything from it, and -- after he switched on a ward of his own beside the owner's outside wall -- hitting that wall and opening the chest under it; he was shown the `OutsideWardsMessage` and `TombstonesMessage`. The friend on the list of the owner's ward opened the chest and the tombstone, the owner took everything from his tombstone and hit his own wall under the stranger's ward, the stranger hit and opened what he had built inside the owner's ward (`OwnPieces`), and the carrot nobody planted was picked (it went, a carrot dropped). With the rules Off and with the guard off all of it went through -- except that the guard as it runs live refused, as the game's ward does, the stranger's hit and chest inside the owner's ward, his own included, and the owner's hit on his own wall under the stranger's switched-on ward: the hole that `OwnPieces` and `OutsideWards` close. Steps 1--15 and O1--O11 gave exactly what they gave before. The only exceptions in the logs are three of the test kit's simulated players (`Player.UpdateGyro`), the same in every run.
 
+### Ward guard: the six rules of 1.33.0
+
+`DestroyLog`, `Claims`, `IndirectHits`, `TamedAnimals`, `Vehicles` and `Terrain` (with `TerrainMargin` 2 m), tested on the copy of the live world of 1 November (game 1.0.20) with the same three simulated players (owner fake0, stranger fake1, friend fake2 on the owner's list), in five runs: `v133` (the 1.31.0 rules On, `DestroyRequests` On, `DestroyLog` and the six rules On), `v133log` (the six rules LogOnly, `DestroyRequests` LogOnly, `DestroyLog` on), and the three earlier runs with the six rules at their defaults (`out`, `on`, `off`). The steps run after the earlier ones, in a corner 35 m east and 40 m south of the scene, each request sent as a client sends it. The observed values are what the server holds after the request (a guard-log line is quoted only where one was written: a refusal is written once a minute per player, kind and builder or ward, so a second refusal of the same kind within a minute leaves no line).
+
+| Step | `v133` (On) | `v133log` (LogOnly) | `out`, `on` | `off` (no guard) |
+|---|---|---|---|---|
+| C1 stranger takes fake0's piece (owner only, outside the wards), then asks for it to be destroyed | owner stays the server, piece still there; line "tried to take over woodwall ... refused" | owner fake1, piece gone; lines "take over ... LogOnly: let through" and "destroyed: fake0's woodwall: fake1 (whose game owns it) asked for it to be destroyed" | owner fake1, gone, no line | owner fake1, gone |
+| C2 stranger takes a sign over and writes its text | text "mine", owner the server; line "take over sign" | "hacked", owner fake1; LogOnly line | "hacked", owner fake1 | "hacked", owner fake1 |
+| C3 fake0 does the same on his own sign | "own", owner fake0, no line | the same | the same | the same |
+| C4 stranger claims a fire pit nobody owns | owner fake1, no line | the same | the same | the same |
+| I1 stranger's hit with no attacker (Catapult) on the warded wall | health unchanged | hit applied (health 370) | hit applied | hit applied |
+| I2 a boar fake1's game owns hits a wall outside the wards | unchanged | applied; line "tried to hit (EnemyHit, Boar run by the sender's own game) ... LogOnly: let through" | applied | applied |
+| I3 a boar the server owns destroys fake0's weak piece | piece destroyed; line "destroyed: fake0's woodwall: hit by a Boar" | destroyed; the same line | destroyed, no line | destroyed, no line |
+| T1 stranger hits the tamed boar in fake0's ward (hit of 3.1 after resistance) | health 20 -> 20; line "tried to hit Boar ... refused" | 20 -> 16.9; LogOnly line | 16.9 | 16.9 |
+| T2 the friend on the list hits it | 20 -> 16.9 | 16.9 -> 13.75 | 16.9 -> 13.75 | 16.9 -> 13.75 |
+| T3 stranger renames and commands it | name "Pet" | "Hax" | "Hax" | "Hax" |
+| V4 stranger fires fake0's catapult that the server owns (loaded by fake0) | `RPC_Shoot` dropped (nobody hears it), still loaded; line "tried to fire Catapult ... refused" | passed (fake0 and fake2 hear it), fired by the server (no longer loaded); line "tried to fire (the server owns it, so the shot would be the server's own) ... LogOnly: let through" | passed, fired, no line (`Structures` and `OutsideWards` alone do not drop it) | passed, fired |
+| V5 fake0 fires his own catapult that his game owns | fake1 and fake2 hear `RPC_Shoot` | the same | the same | the same |
+| V1 stranger asks for the helm of fake0's Karve | fake1 is answered `RequestRespons` False | no answer (the fake player is not in the boat) | no answer | no answer |
+| V2 the friend asks for it | no refusal | no refusal | no refusal | no refusal |
+| V3 stranger asks to own fake0's cart | owner stays the server, fake1 hears `RPC_RequestDenied`; line | owner fake1; LogOnly line | owner fake1 | owner fake1 |
+| V6 stranger opens the Karve's chest (on the ship's own object) | granted=False | granted=True | granted=True | granted=True |
+| V7 stranger opens a cart's chest | granted=False; line | granted=True; LogOnly line | granted=True | granted=True |
+| G1 stranger digs (operation `digg_blobLavaExplosion`, 3 m) 1 m from fake0's piece outside the wards | not applied (0 operations on the terrain compiler); line "tried to change the ground ... within 5 m of woodwall ... refused" | applied; LogOnly line | applied | applied |
+| G2 stranger digs 20 m from it | applied | applied | applied | applied |
+| G3 stranger digs inside fake0's ward | not applied; line "within reach of the ward ... whose list does not have them" | applied; LogOnly line | applied | applied |
+| G4 fake0 digs inside his ward | applied | applied | applied | applied |
+| D1 the friend on fake0's list takes fake0's piece outside the wards down | gone (seen on the next look: the game removes it a moment later); line "destroyed: fake0's woodwall: fake2 (333) took it down" | the same | gone, no line | gone, no line |
+| G5 stranger's game creates a new terrain compiler in a zone with none, its operation 1 m from fake0's piece outside the wards | destroyed (gone on the late look: the destroy is queued); line "made a new terrain compiler ... within 5 m of woodwall ... refused" | kept, owner the server; LogOnly line | kept, owner fake1, no line | kept, owner fake1 |
+| G6 the same in a free zone, 45 m from any build or ward | kept, the server owns it; no line | kept, the server owns it; no line | kept, owner fake1 | kept, owner fake1 |
+| G7 stranger's game creates a second compiler in the zone of G6 (99999 operations) | destroyed; line "made a second terrain compiler in a zone that has one ... refused" | kept; LogOnly line | kept, owner fake1 (the game then drops the one with fewer operations: G6 is gone on the late look) | the same |
+| G8 stranger's game takes over the server's compiler of the ward, raising its data by 1000 operations | owner stays the server, data not read (operations unchanged); line "tried to take over the terrain compiler ... refused" | owner fake1, 1002 operations; LogOnly line | owner fake1, 1002, no line | owner fake1, 1002 |
+| G9 stranger's `RPC_ApplyOperation` next to fake0's piece on the G6 compiler | refused by `Terrain`, line "tried to change the ground ... refused" | line "LogOnly: let through" | no line | no line |
+| G10 stranger's game creates a new compiler in a fresh zone, its last operation 30 m from fake0's piece, but its heights lowered by 2 m at two vertices 1 m from it | destroyed (gone on the late look); line "made a new terrain compiler (1 operation(s), the last at ...) whose ground is changed at ... within 3.5 m of woodwall ... refused" | kept, owner the server; LogOnly line | kept, owner fake1, no line | the same |
+| G11 stranger's game sends the data of the server's compiler of the ward naming the server as the owner, a newer revision, 99999 operations | owner the server, data not read (1 operation); line "sent the ground data of the terrain compiler ..., which it does not own ... refused" | read (99999 operations), owner the server; LogOnly line | read, no line | the same |
+| G12 as G5 (last operation 1 m from a piece of fake0's, a fresh zone), but the packet names the server as the owner | destroyed; line "made a new terrain compiler ... within 5 m of woodwall ... refused" | kept, owner the server; LogOnly line | kept, owner the server (as the packet says), no line | the same |
+
+`out`, `on` and `off` against the runs of 1.31.0 (`wardguard-t31c-*`): every line of the earlier steps and every guard-log line is the same; only the start-up line differs (it names the new settings) and the scene's object ids. With the six rules at their defaults, V4 and the other new steps go as with no guard at all. The terrain compilers of 1.33.0 (G5--G9, runs `wardguard-t34-{v133,v133log,out,on,off}`) were added after the first five runs of this section: `out`, `on` and `off` equal `wardguard-t33-*` line for line in every earlier step (apart from the expected-value text of two V4 lines in the kit) and have no guard-log line for the new steps; in `v133` and `v133log` the earlier steps are unchanged. No exception and no "Vanilla drift" difference in any of the five. G9's "heard" lists are empty in every mode (the packets are read in the frame they are sent), so the guard-log line is what tells the modes apart there. A server-owned compiler far from every player is released to owner 0 by the game itself (`ZDOMan.ReleaseNearbyZDOS`); G6 therefore reads "owner 0" on the late look.
+
+G10--G12 (runs `wardguard-t35-*`, with the final build) were added last: every earlier step and guard-log line of all five modes equals `wardguard-t34-*` but for the run-to-run noise (the position of the wandering tamed boar, whether two objects were found at the first look), no exception.
+
+Not tested: the paint inside the data of a new terrain compiler, a player's game that really sits in a boat (the fake player is never inside the Karve, so the game's own answer to the helm is not seen where the guard lets it through); the server handing a ship to a game that may not use it (`ZDO.SetOwner` guard; no ship was put at sea); a saddled mount (`Sadle` calls); `Terrain` in `v133log` with the tool's `rotation` flag set.
+
 ## Item ledger: KickMinutes (1.32.0)
 
 Tested on a copy of the live world (game 1.0.20) with four simulated players, the ledger in `LogOnly` with `GraceHours = 0` (so a new
@@ -113,6 +156,52 @@ Tested on a copy of the live world with 30 simulated players sending each object
 ## Anti-cheat: where the numbers come from
 
 The plants of three real players on the server this was written for, replayed through the rule: 181 and 131 plants put down by hand (pairs of plants 0.02 to 0.16 s apart are in the real data -- the time written into a plant is the game's network time, which now and then steps by a few tenths of a second -- but never three in a quarter of a second) and 110 plants put down in groups by a mod (98 of 109 gaps under 0.05 s, up to 36 plants within a quarter of a second). `MinInterval` and `RatePlants` are set from that: the two players who plant by hand (312 plants) were not caught, the mod user was, plant by plant. Two hands are a small sample; a mod that shortens the pause between presses (ToolTweaks) can put honest plants closer than that.
+
+## Anti-cheat: combat rules (1.33.0)
+
+`Unhurt`, `Stamina`, `Damage`, `Skills` and the weapon part of `Items`, on a copy of the live world (game 1.0.20) with twelve simulated players (A to L)
+whose games' writes are ZDO data sent from the player's connection and whose hits are routed `RPC_Damage` calls with a HitData, as a client sends them;
+the server's hits on them are `Character.Damage` on their Player object. `[AntiCheat]` Enabled, Action Kick, Identity Off, Items On, MaxQuality 6, the four
+rules in the mode of the run; `[CharacterGuard]` Enabled (NewCharacterAction Log) and `[ItemLedger] GraceHours = 0` so that a character with nothing on counts
+as new and fresh. Three runs (`cheat133run.sh <label> on|log|off`, labels `gon`, `glog`, `goff`), 18 checks each, 0 failed in all three, no exception, and the plugin's "Damage bound" line in the log of `on` and `log`:
+
+| step | what | on | log | off |
+|---|---|---|---|---|
+| U1 | A takes two lethal hits (500 on 60 health) and its game writes health exactly 1.0 after each (healed between) | 1 Unhurt finding | 1 | none |
+| U2 | B takes 30, then a lethal hit and writes 30, then 0 and dead | none | none | none |
+| U3 | C takes 8 hits of 3000 and its game keeps health at 60 and writes fresh data | 1 | 1 | none |
+| U4 | D takes the same while its game says it blocks | none | none | none |
+| U5 | E takes the same and sends no data | none (dropped after 6 s) | none | none |
+| S1 | F (iron sword, costs 10) swings 12 times in 13 s, stamina constant 100 | 1 Stamina finding | 1 | none |
+| S2 | G does the same with stamina dropping and recovering | none | none | none |
+| S3 | peer 6 swings 12 times 1.2 s apart, stamina back at 100 before each swing (cost 10) | none (stamina that is back at 100 before each swing is not a cheat; the tick samples between swings show it moving) | none | none |
+| D1 | H sends a hit of 5000 on a boar | 1 Damage finding, hit dropped, boar health 10 -> 10 | 1, boar killed | none, boar killed |
+| D2 | B sends a hit of 1500 on a wild boar (below the automatic bound, MaxDamage 0) | none, boar killed | none | none |
+| D3 | D holds a butcher knife (tamed-only) and hits a tamed boar with 2480 (the kit takes it from the plugin's bounds: above the normal bound, below the knife's) | none (the knife's bound 5625 applies), boar killed | none | none |
+| D4 | E holds the same knife and sends the same 2480 on a wild boar | 1 Damage finding, hit dropped | 1, boar killed | none, boar killed |
+| K1 | I (new, fresh: exact account) sends Swords level 100 in its first hit | 1 Skills finding | 1 | none |
+| K2 | J (fresh) sends 200 hits at levels rising from 0 to 12 | none | none | none |
+| K3 | K (not verifiable: unverified account) first at 60, 61 after 300 hits; then 95 | none; then 1 | none; then 1 | none; none |
+| K4 | the ledger `<world>.skills.txt` after a save | I, J exact from 0 (Swords=0:1.5 and 0:300), K unknown from 60 | the same | no file |
+| Q1 | L holds an iron sword of quality 2 and sends a hit with `m_itemLevel` 9, then 2 | 1 Items finding for the first, none for the second | the same | the same (Items is On in every run) |
+
+Each finding of the combat rules is followed by an `evidence:` line in the guard log (7 in `on` and in `log`, none in `off`, where nothing of the combat rules runs and the
+bounds below are not even computed). What the server's game says is the most that anything gives (logged at the first use, `Anti-cheat: combat bounds from the game`):
+the largest protection shield absorbs 700, status effects add up to 40 armour, the skill level bonus of status effects is Swords 0, Knives 0, Clubs 20, Polearms 0, Spears 20,
+Axes 0, Bows 50, Crossbows 0, Unarmed 15, Pickaxes 0, WoodCutting 0, ElementalMagic 35; the strongest hit of a weapon a player can make at world level 0 is THSwordGold_FrostFire at quality 4,
+334 x 3 for its special attack = 1002, 1102 with the percentages status effects give its damage types (slash and frost +10 %), 1378 with the multiplier x1.25; the automatic `MaxDamage` bound is 2067 (1378 x 1.5); a tamed-only weapon (KnifeButcher, 3000) gets 5625 against a tamed target. The runs `gon`/`glog`/`goff` were made with a build that put the largest percentage of any type (+60 % chop, GP_TheElder) on the whole hit (bound 3006, knife hit 3607); the final runs `hon`/`hlog`/`hoff` take it type by type: 18 checks, 0 failed in each, no exception. The world level adds 120 per level to each weapon's damage (the game's own `IncreaseEqually`).
+
+Final build of 1.33.0 (`new134`, with the Stamina and Damage changes and the terrain compilers): 41 checks, 0 failed; against `new133` only the tallies ("and 4 more" / "and 5 more" etc.), the order of two lines in the guard log and the position that moves (994 / 1008) differ.
+
+Regression: `anticheatrun.sh` with the 30 simulated players (`KITX='ackickwait 22\n' CFGX='[AntiCheat]\nMaxQuality = 6\n'`, 150 s) on the unchanged 1.32.0 DLL (`base133`) and on the
+new build (`new133`): 41 checks, 0 failed in both; the two summaries and guard logs are the same line for line except the numbers of the tallies ("and 4 more in the last 10 s" /
+"and 5 more"), a position that moves (991 / 994) and the four new rules in the `anticheat` console listing (Off, 0 findings). `wardguardrun.sh ... out` on the live copy against the
+earlier 1.33.0 run (`t33`): the same except the session numbers of the simulated players and one boar of the scene (`n_i3b`) that was not there yet at the start of the step in the
+new run (every later line is the same).
+
+Not tested: a real client (the rules read what a real game writes to its character and what it sends in a hit; the simulated games write what the code of the game does, read
+off its source), god mode or a damage cheat of a real mod, players above skill 60 playing on the live server (the table of skill bonuses is the game's own, the experience
+counted is not checked against a real character), and a protection shield or armour that the player really wears (the simulated characters wear nothing, so only the bounds are used).
 
 ## RPC census
 
