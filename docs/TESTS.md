@@ -203,6 +203,27 @@ Not tested: a real client (the rules read what a real game writes to its charact
 off its source), god mode or a damage cheat of a real mod, players above skill 60 playing on the live server (the table of skill bonuses is the game's own, the experience
 counted is not checked against a real character), and a protection shield or armour that the player really wears (the simulated characters wear nothing, so only the bounds are used).
 
+## Death log (1.34.0)
+
+`[DeathLog] Enabled` on a world with twelve simulated players (A to L) whose games' writes are ZDO data sent from the player's connection and whose
+hits and deaths are routed `RPC_Damage` and `OnDeath` calls, as a client sends them; the server's hits on them are `Character.Damage` on their Player
+object. Two runs (`deathrun.sh <label> on|off`): on 13 checks, 0 failed; off 13 checks, 0 failed (no file, no line).
+
+| step | what | line |
+|---|---|---|
+| D1 | a server hit of a Troll on A, A dies | `creature`, `Troll`, `$enemy_troll`, level 1 |
+| D2 | B's RPC_Damage on C naming B's character, C dies | `player`, B's name (quotes, backslash, tab, U+2028, emoji escaped), B's account |
+| D3 | D 25 m above the ground for 1 s, then on it, then dead | `fall`, fell 25.0 |
+| D4 | E in deep water, stamina 0 | `drowned` |
+| D5 | a Troll's hit with fire 10 on F, F dead 4 s later | `dot`, fire, `Troll` |
+| D6 | a server hit of type Tree without an attacker on G | `object`, `Tree` |
+| D7 | H on a Mountain spot | `frozen` |
+| D8 | I at x = 10450 | `edge` |
+| D9 | J in the Meadows, nothing before | `unknown` |
+| D10 | K writes the dead flag without the RPC; L sends OnDeath twice and writes the flag | one line each |
+| D12 | J owns a Troll and sends its hit on B as RPC_Damage naming the Troll, B dies | `creature`, `Troll` |
+| D11 | all | 12 lines, a second OnDeath adds none, the 18 keys in order |
+
 ## RPC census
 
 1.28.0, tested on a copy of the live world taken the same evening (game 1.0.20, the census on, the rest of the
