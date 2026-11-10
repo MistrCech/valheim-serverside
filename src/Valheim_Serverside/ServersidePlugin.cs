@@ -89,6 +89,7 @@ namespace Valheim_Serverside
 			availableFeatures.AddFeature(new Features.DvergrTrade());
 			availableFeatures.AddFeature(new Features.Decay());
 			availableFeatures.AddFeature(new Features.AntiCheat());
+			availableFeatures.AddFeature(new Features.DeathLog());
 			availableFeatures.AddFeature(new Features.RpcCensus());
 			availableFeatures.AddFeature(new Features.WebMap());
 			availableFeatures.AddFeature(new Features.PlayerLimit());
@@ -130,6 +131,7 @@ namespace Valheim_Serverside
 				Safely(Features.WardGuard.Tick, "Ward guard");
 				Safely(Features.DvergrTrade.Tick, "Dvergr trade");
 				Safely(Features.AntiCheat.Tick, "Anti-cheat");
+				Safely(Features.DeathLog.Tick, "Death log");
 				Safely(Features.WebMap.Tick, "Web map");
 				Safely(PlayerMessages.Tick, "Player messages");
 			}

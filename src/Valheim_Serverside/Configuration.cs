@@ -191,6 +191,8 @@ namespace PluginConfiguration
 		public static ConfigEntry<bool> fireControlFireplaceIgnition;
 		public static ConfigEntry<bool> fireControlOnlyProjectiles;
 
+		public static ConfigEntry<bool> deathLogEnabled;
+
 		public static ConfigEntry<bool> dvergrTradeEnabled;
 		public static ConfigEntry<string> dvergrTradeOffers;
 		public static ConfigEntry<string> dvergrTradeOffersAshlands;
@@ -616,6 +618,9 @@ namespace PluginConfiguration
 				"A lit hearth, bonfire, campfire, iron fire pit, brazier or standing torch sets alight whatever burnable touches its flame (vanilla). Off: no fireplace ever does -- a hearth, brazier or torch then cannot start a fire at all, a bonfire or campfire still throws sparks.");
 			fireControlOnlyProjectiles = config.Bind<bool>("FireControl", "OnlyProjectiles", false,
 				"Only projectiles start fires: a fire arrow, a Staff of Embers fireball, a meteor or a lava rock, and what they set alight burns and spreads as before (within MaxRadius and MaxSpread). Nothing a base has -- no fireplace, bonfire, campfire, hearth, brazier or torch, no fire they lit -- throws a spark or sets anything alight, so a player's own build never sets it on fire. Surtlings' and fuling shamans' fireballs never set anything alight in the game.");
+
+			deathLogEnabled = config.Bind<bool>("DeathLog", "Enabled", false,
+				"Write every player's death to <world>.deaths.log next to the world save, one JSON object per line, with the cause the server can tell: another player's or a creature's hit, a hit of the server's own objects (a falling tree, a ballista, ...), a fall, drowning, the edge of the world, burning or poison after a creature's hit, cold, lava. The player's game does not send the cause, so this is the server's reading of it. Needs a restart to switch on. See docs/DEATHLOG.md.");
 
 			dvergrTradeEnabled = config.Bind<bool>("DvergrTrade", "Enabled", false,
 				"Let players buy from the dvergr of the Mistlands for trophies, and have a camp's ward switched off. Next to each dvergr ward (the guard towers, the lighthouse, the excavations, the harbour, the charred tower) the server puts up a chest and a sign; what a player puts into the chest and closes is weighed against Offers, the price taken and the goods left in its place. An offer can also switch the camp's ward off for some hours (and calm the dvergr that are angry), so what lies in the camp can be taken without anyone being attacked. Vanilla clients: nothing to install. Needs a restart to switch on; switching it off puts up nothing new and takes nothing down (wards that are off still come back on in time). See the README.");

@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Added
+
+- `[DeathLog] Enabled` (off by default): one JSON line per player death in `<world>.deaths.log` next to the world save, with the cause the server can infer (a player's or a creature's hit, a hit of the server's own objects, a fall, drowning, the edge of the world, burning or poison after a creature's hit, cold, lava), for a bot to post. Rules and format: `docs/DEATHLOG.md`.
+
 ## [1.33.0] - 2026-11-09
 
 ### Added
