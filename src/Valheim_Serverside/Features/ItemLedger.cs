@@ -2050,6 +2050,7 @@ namespace Valheim_Serverside.Features
 					s_path = Path.Combine(SaveSystem.GetWorldsSaveRootPath(ZNet.World.m_fileSource), ZNet.World.m_name + ".guard.log");
 				}
 				File.AppendAllText(s_path, DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss'Z' ", CultureInfo.InvariantCulture) + line + Environment.NewLine);
+				ActivityLog.Guard(line);
 			}
 			catch (Exception e)
 			{

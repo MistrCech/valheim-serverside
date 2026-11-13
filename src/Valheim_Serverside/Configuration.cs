@@ -193,6 +193,11 @@ namespace PluginConfiguration
 
 		public static ConfigEntry<bool> deathLogEnabled;
 
+		public static ConfigEntry<bool> activityLogEnabled;
+		public static ConfigEntry<int> activityLogDays;
+		public static ConfigEntry<float> activityLogPositionSeconds;
+		public static ConfigEntry<float> activityLogMaxMegabytes;
+
 		public static ConfigEntry<bool> dvergrTradeEnabled;
 		public static ConfigEntry<string> dvergrTradeOffers;
 		public static ConfigEntry<string> dvergrTradeOffersAshlands;
@@ -621,6 +626,18 @@ namespace PluginConfiguration
 
 			deathLogEnabled = config.Bind<bool>("DeathLog", "Enabled", false,
 				"Write every player's death to <world>.deaths.log next to the world save, one JSON object per line, with the cause the server can tell: another player's or a creature's hit, a hit of the server's own objects (a falling tree, a ballista, ...), a fall, drowning, the edge of the world, burning or poison after a creature's hit, cold, lava. The player's game does not send the cause, so this is the server's reading of it. Needs a restart to switch on. See docs/DEATHLOG.md.");
+
+			activityLogEnabled = config.Bind<bool>("ActivityLog", "Enabled", false,
+				"Write what players do to one file per day (UTC) in the folder <world>.activity next to the world save, one JSON object per line: sessions, positions, health and stamina, equipment, hits sent through the server, damage taken, the health creatures lose in each player's game, kills, building, pickups, and every line of the guard log. For studying how players play (for example to tune the anti-cheat). Only the server's view: what a player's game does without telling the server is not in it. Needs a restart to switch on. See docs/ACTIVITYLOG.md.");
+			activityLogDays = config.Bind<int>("ActivityLog", "Days", 7,
+				new ConfigDescription("Keep the files of the last this many days (today included); older ones are deleted when the server starts and when a new day begins. 0 = keep everything.",
+					new AcceptableValueRange<int>(0, 365)));
+			activityLogPositionSeconds = config.Bind<float>("ActivityLog", "PositionSeconds", 5f,
+				new ConfigDescription("How often a line with each online player's position, health, stamina and held items is written.",
+					new AcceptableValueRange<float>(1f, 60f)));
+			activityLogMaxMegabytes = config.Bind<float>("ActivityLog", "MaxMegabytesPerDay", 200f,
+				new ConfigDescription("When a day's file reaches this size, only sessions, deaths, kills and guard lines are written for the rest of that day (one line \"cap\" says so). 0 = no limit.",
+					new AcceptableValueRange<float>(0f, 100000f)));
 
 			dvergrTradeEnabled = config.Bind<bool>("DvergrTrade", "Enabled", false,
 				"Let players buy from the dvergr of the Mistlands for trophies, and have a camp's ward switched off. Next to each dvergr ward (the guard towers, the lighthouse, the excavations, the harbour, the charred tower) the server puts up a chest and a sign; what a player puts into the chest and closes is weighed against Offers, the price taken and the goods left in its place. An offer can also switch the camp's ward off for some hours (and calm the dvergr that are angry), so what lies in the camp can be taken without anyone being attacked. Vanilla clients: nothing to install. Needs a restart to switch on; switching it off puts up nothing new and takes nothing down (wards that are off still come back on in time). See the README.");

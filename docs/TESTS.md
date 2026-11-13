@@ -224,6 +224,31 @@ object. Two runs (`deathrun.sh <label> on|off`): on 13 checks, 0 failed; off 13 
 | D12 | J owns a Troll and sends its hit on B as RPC_Damage naming the Troll, B dies | `creature`, `Troll` |
 | D11 | all | 12 lines, a second OnDeath adds none, the 18 keys in order |
 
+## Activity log (1.35.0)
+
+`[ActivityLog] Enabled` on a world with seven simulated players (A to G): their games' writes are ZDO data sent from the player's connection, their hits and
+damage are routed `RPC_Damage` calls as a client sends them, the server's hits on them are `Character.Damage` on their Player object, and creatures are
+owned by one of the players or by the server. Three runs (`activityrun.sh <label> on|off|cap`): on 24 checks, 0 failed; off 1 check, 0 failed (no folder);
+cap (`MaxMegabytesPerDay = 0.002`) 8 checks, 0 failed. The regression `deathrun.sh <label> on` after it: 13 checks, 0 failed. The first `on` run had one
+failure (the `pickup` counted one item for a stack of ten, since the stack is in the item blob of the ZDO, not in `ZDOVars.s_stack`); fixed, then clean.
+
+| step | what | line |
+|---|---|---|
+| A1 | A moves 3 m a second for 8 s, then 300 m at once | `pos` with `v` about 3 and `vmax`, one `jump` of 300 m |
+| A2 | A takes an axe in the right hand | one `equip`, the next `pos` has `r` |
+| A3 | A's game writes health 0 and dead | one `died` |
+| C1 | C's game writes its Troll's health 800, 760, 700; the Troll is destroyed with a ragdoll beside it | two `mobhp` by C (drop 40, 60), one `mobend` died true, total 100 |
+| D1 | D's game writes its Boar's health 20, 12; the Boar is destroyed without a ragdoll | `mobhp` by D, `mobend` died false |
+| B1 | B (name with quote, backslash, tab, U+2028, emoji) sends `RPC_Damage` on C's Troll | one `hit`, `towner` C, types `slash` 40, `ranged` false |
+| S1 | the server damages a Boar it owns, hit naming B | `mobhp` by `server`, `acc` and `dist` null, `hitby` B |
+| F1 | the server's Greyling hits F; C's Troll hits F as an `RPC_Damage` | `hurt` by Greyling; `hurt` by Troll with `via` C |
+| E1 | E builds five wood walls, takes two down, leaves | one `build` n 5, one `unbuild` n 2 own 2 |
+| G1 | G destroys a Wood drop with a stack of ten, leaves | one `pickup` n 1 items 10 |
+| F2 | F stands still for 25 s | one or two `pos` (the AFK rule) |
+| all | the whole file | every line JSON with `t` and `ev`, one `start` first, a `join`, `spawn` and `leave` for each player, the name escaped, guard lines, retention (files of today minus 10 and minus 7 gone, minus 6 and a `notes.txt` kept), no `cap` line under the cap |
+
+Final build of 1.35.0 (DLL `5f7340b07870849b`): `on` again 24 checks, 0 failed, the first line says version 1.35.0. The anti-cheat regression (`anticheatrun.sh` with the 30 simulated players, `KITX='ackickwait 22\n'`, `CFGX` with `MaxQuality = 6` and `[ActivityLog] Enabled = true`, 150 s): 41 checks, 0 failed, no exception; its activity file held every one of the 69 guard log lines as `guard`, 30 `join`/`spawn`/`leave`, and every line parsed as JSON.
+
 ## RPC census
 
 1.28.0, tested on a copy of the live world taken the same evening (game 1.0.20, the census on, the rest of the

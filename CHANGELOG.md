@@ -1,3 +1,9 @@
+## [1.35.0] - 2026-11-13
+
+### Added
+
+- `[ActivityLog] Enabled` (off by default): what the server can see of players' play, one JSON line at a time, one file per UTC day in `<world>.activity` next to the world save (`Days` kept, 7 by default): sessions, positions with speed, health and stamina, equipment, jumps, deaths, hits sent through the server, damage taken, the health creatures lose in the game that owns them (`mobhp`, and `mobend` when the creature is gone), building, unbuilding, pickups, and every line of the guard log. A size cap per day keeps only sessions, deaths, kills and guard lines once reached. Rules and format: `docs/ACTIVITYLOG.md`.
+
 ## [1.34.0] - 2026-11-10
 
 ### Added
