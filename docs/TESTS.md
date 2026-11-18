@@ -426,3 +426,23 @@ reports and does not keep anyone from joining.
 
 With the defaults neither feature patches anything (P1, A and B: no "Player limit" line), so the other tests were not run
 again for this build. The joining runs were made before the Windows fix, which changes only `PublicWithoutPassword`.
+
+## Anti-Sting (1.36.0)
+
+`[Fixes] AntiSting`, tested on the copy of the live world of 18 October (game 1.0.20, dedicated server on Linux with only this plugin)
+with one real vanilla client (a bot plugin that drinks from the inventory as a click does, `Humanoid.UseItem`, and counts the hits it
+takes). Each Deathsquito was spawned by the server console's `spawn`, so the server owned and ran it, as the game's own spawns are run;
+one the client spawns itself is the client's and proves nothing. Health kept up by the bot; 40 s per row unless said.
+
+| Run | Build | Drink | Stings |
+|---|---|---|---|
+| 1 | 1.36.0 | none | 3 (261 damage) |
+| 2 | 1.36.0 | Anti-Sting Concoction | 0 in 80 s; the Deathsquito came within 1.7 m and turned away. Log: "SarkasticClaude drank something that makes $enemy_deathsquito flee them" |
+| 3 | 1.36.0 | drunk, then the effect removed in the client's game (`SEMan.RemoveStatusEffect`, the same `StatusEffect.Stop` as running out and death) | 0 in 30 s with it, then 4 in 40 s without |
+| 4 | 1.36.0 | drunk, then the client logged out and in again (status effects are not saved) | 0 in 15 s, then 4 in 40 s after |
+| 5 | 1.35.0 | Anti-Sting Concoction | 4 (333 damage): the reported bug |
+
+The first build read the drink from the bottle the game shows in the player's hand while drinking. That never reaches the network:
+`Humanoid.UseItem` looks the item up by its shared data (`ObjectDB.TryGetItemPrefab(item.m_shared)`), and an item in an inventory is
+an instantiated copy with its own copy of that data, so the lookup fails and nothing is shown. The drink's glow (`vfx_BugRepellent`, a
+start effect of `Potion_BugRepellent`) is networked, has no timer, carries the player's id and is destroyed when the effect ends.

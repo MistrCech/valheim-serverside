@@ -1,3 +1,14 @@
+## [1.36.0] - 2026-11-18
+
+### Fixed
+
+- Deathsquitos stung players who drank the Anti-Sting Concoction (#6). The game that runs a creature looks for the drink in the player's
+  status effects, which exist only in the player's own game; with the server running the creatures it never found it. The server now
+  sees the drink's glow, a networked effect the player's game keeps on the player while the drink lasts and that names the player, and
+  answers that check from it: the creature flees as in single player, and stings again when the drink runs out, the player dies or logs
+  out. Vanilla clients, no mod on them. Which drinks make which creature flee is read from the game's items. `[Fixes] AntiSting`, on by
+  default.
+
 ## [1.35.0] - 2026-11-13
 
 ### Added

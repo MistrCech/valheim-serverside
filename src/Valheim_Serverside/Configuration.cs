@@ -40,6 +40,7 @@ namespace PluginConfiguration
 		public static ConfigEntry<bool> compatVcpUnload;
 		public static ConfigEntry<bool> fixTeleportGhosts;
 		public static ConfigEntry<bool> fixServerSmoke;
+		public static ConfigEntry<bool> fixAntiSting;
 
 		public static ConfigEntry<bool> characterGuardEnabled;
 		public static ConfigEntry<Valheim_Serverside.Features.CharacterGuard.NewCharacterPolicy> characterGuardNewCharacters;
@@ -680,6 +681,8 @@ namespace PluginConfiguration
 				"Tell the players near the old spot to drop a player who teleported away. Valheim 1.0 checks whether an object left their area before it stores the new position, so the teleported player stayed there for them, frozen, until they next crossed a zone line.");
 			fixServerSmoke = config.Bind<bool>("Fixes", "ServerSmoke", true,
 				"Let fires and fireplaces make smoke on the server while a player is within 64 m, as they do on that player's computer in vanilla. A smoke source only puffs while the local player is that close, and a dedicated server has none, so the server never saw smoke: a fireplace in a room full of smoke, which every player sees go out, kept burning on the server -- using fuel, throwing sparks and setting what touches it alight -- and a fire under a roof never choked.");
+			fixAntiSting = config.Bind<bool>("Fixes", "AntiSting", true,
+				"Let creatures flee a player who drank something that makes them flee, as the Anti-Sting Concoction does Deathsquitos. The game that runs a creature checks the player's status effects, which exist only in that player's own game, so with the server running the creatures the drink did nothing. The server sees the drink's glow, which the player's game shows to everyone for as long as the drink lasts, and answers that check from it.");
 		}
 	}
 }
